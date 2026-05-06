@@ -1,1 +1,2 @@
 - WSL password: admin123
+- The OpenRouter key link: https://openrouter.ai/workspaces/default/keys/ae0693a11fd41b2f8bd0e909447e177b3c12a3efa157834b43167cc7277f6145

@@ -9,7 +9,14 @@ from dotenv import load_dotenv
 from litellm import completion
 
 
-load_dotenv()
+load_dotenv(override=True)
+
+api_key = os.getenv("OPENROUTER_API_KEY")
+
+if not api_key:
+    raise RuntimeError("OPENROUTER_API_KEY is missing")
+
+print(f"Using OpenRouter key: {api_key[:12]}...{api_key[-6:]}")
 
 
 PROJECT_DIR = Path(os.getenv("PROJECT_DIR", "workspace"))

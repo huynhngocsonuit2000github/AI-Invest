@@ -1,47 +1,54 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using TodoApi.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace TodoApi.Services
 {
     public class TodoService : ITodoService
     {
-        private List<TodoItem> _todoItems = new List<TodoItem>();
+        private readonly TodoContext _context;
 
-        public async Task<IEnumerable<TodoItem>> GetTodoItemsAsync()
+        public TodoService(TodoContext context)
         {
-            return _todoItems;
+            _context = context;
+        }
+
+        public async Task<IEnumerable<TodoItem>> GetTodoItemsAsync(int pageSize, int pageNumber)
+        {
+            return await _context.TodoItems.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToListAsync();
         }
 
         public async Task<TodoItem> GetTodoItemAsync(long id)
         {
-            return _todoItems.Find(i => i.Id == id);
+            return await _context.TodoItems.FindAsync(id);
         }
 
         public async Task<TodoItem> CreateTodoItemAsync(TodoItem todoItem)
         {
-            _todoItems.Add(todoItem);
+            _context.TodoItems.Add(todoItem);
+            await _context.SaveChangesAsync();
             return todoItem;
         }
 
         public async Task UpdateTodoItemAsync(long id, TodoItem todoItem)
         {
-            var existingItem = _todoItems.Find(i => i.Id == id);
-            if (existingItem == null)
+            var existingTodoItem = await _context.TodoItems.FindAsync(id);
+            if (existingTodoItem != null)
             {
-                throw new InvalidOperationException();
+                existingTodoItem.Name = todoItem.Name;
+                existingTodoItem.IsComplete = todoItem.IsComplete;
+                await _context.SaveChangesAsync();
             }
-
-            existingItem.Name = todoItem.Name;
-            existingItem.IsComplete = todoItem.IsComplete;
         }
 
         public async Task DeleteTodoItemAsync(long id)
         {
-            var item = _todoItems.Find(i => i.Id == id);
-            if (item!= null)
+            var todoItem = await _context.TodoItems.FindAsync(id);
+            if (todoItem != null)
             {
-                _todoItems.Remove(item);
+                _context.TodoItems.Remove(todoItem);
+                await _context.SaveChangesAsync();
             }
         }
     }

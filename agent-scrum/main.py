@@ -109,10 +109,18 @@ def write_file(path: str, content: str) -> str:
     return f"File written: {path}"
 
 
-def run_command(command: str) -> str:
+def run_command(command: str, path: str = ".") -> str:
+    cwd = PROJECT_DIR / path
+
+    if Path(path).is_absolute():
+        cwd = Path(path)
+
+    if not cwd.exists():
+        return f"Command path does not exist: {cwd}"
+
     result = subprocess.run(
         command,
-        cwd=PROJECT_DIR,
+        cwd=cwd,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -183,6 +191,10 @@ Rules:
 - If a command fails, fix the code and run again.
 - When finished, set done=true and include summary in final_answer.
 - Return JSON only. No markdown.
+- Do not set done=true if actions is not empty.
+- If you need to modify files, return actions first with done=false.
+- Only return done=true after tool results confirm the files were written and build succeeded.
+- Always use relative paths from PROJECT_DIR. Do not use absolute Windows paths.
 """
 
 
@@ -241,19 +253,16 @@ def run_agent(user_prompt: str, max_steps: int = 10) -> str:
             )
             continue
 
-        if agent_response.get("done"):
-            return agent_response.get("final_answer", "Done.")
-
         actions = agent_response.get("actions", [])
 
-        if not actions:
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "No actions were provided. Use tools to perform the task.",
-                }
-            )
-            continue
+        # Only finish immediately when there are no actions left to run.
+        # Some models incorrectly return done=true together with actions.
+        # In that case, we still execute the actions first.
+        if agent_response.get("done") and not actions:
+            return agent_response.get("final_answer", "Done.")
+
+        if agent_response.get("done"):
+            return agent_response.get("final_answer", "Done.")
 
         tool_results = []
 
@@ -300,7 +309,7 @@ def main() -> None:
     if not prompt:
         prompt = "create todo api dotnet app"
 
-    result = run_agent(prompt)
+    result = run_agent(prompt, 20)
 
     print("\nFinal result:")
     print(result)

@@ -1,0 +1,1 @@
+Build a.NET 8 Web API for a TODO application. Use an in-memory List to manage todo items. Create CRUD endpoints for todo items. Use clean class structure with model, DTOs, service, and controller. Run dotnet build when finished.

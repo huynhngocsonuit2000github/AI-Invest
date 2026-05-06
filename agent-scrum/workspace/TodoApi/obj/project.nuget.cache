@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "FFGPCLi+m/Y=",
+  "success": true,
+  "projectFilePath": "D:\\me\\AI Investigation\\agent-scrum\\workspace\\TodoApi\\TodoApi.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Window\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.7\\microsoft.aspnetcore.openapi.10.0.7.nupkg.sha512",
+    "C:\\Users\\Window\\.nuget\\packages\\microsoft.openapi\\2.0.0\\microsoft.openapi.2.0.0.nupkg.sha512"
+  ],
+  "logs": []
+}

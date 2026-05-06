@@ -1,173 +1,299 @@
+import json
 import os
+from pyexpat.errors import messages
 import subprocess
-from typing import Type
+from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
-
-from crewai import Agent, Task, Crew, Process, LLM
-from crewai.tools import BaseTool
+from litellm import completion
 
 
 load_dotenv()
 
 
-class OpenHandsInput(BaseModel):
-    task: str = Field(..., description="Coding task to send to OpenHands.")
+PROJECT_DIR = Path(os.getenv("PROJECT_DIR", "workspace"))
+PROJECT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class OpenHandsTool(BaseTool):
-    name: str = "open_hands_coding_agent"
-    description: str = (
-        "Use OpenHands to perform coding tasks in the local project. "
-        "It can create files, edit code, and run terminal commands."
-    )
-    args_schema: Type[BaseModel] = OpenHandsInput
-
-    def _run(self, task: str) -> str:
-        project_dir = os.getenv("PROJECT_DIR", os.getcwd())
-
-        llm_api_key = os.getenv("LLM_API_KEY") or os.getenv("GROQ_API_KEY")
-        llm_model = os.getenv("LLM_MODEL")
-        llm_base_url = os.getenv("LLM_BASE_URL")
-
-        if not llm_api_key:
-            return "OpenHands config error: missing LLM_API_KEY or GROQ_API_KEY."
-
-        if not llm_model:
-            return "OpenHands config error: missing LLM_MODEL."
-
-        env = os.environ.copy()
-        env["LLM_API_KEY"] = llm_api_key
-        env["LLM_MODEL"] = llm_model
-
-        if llm_base_url:
-            env["LLM_BASE_URL"] = llm_base_url
-
-        env["LITELLM_DROP_PARAMS"] = os.getenv("LITELLM_DROP_PARAMS", "True")
-        env["OPENHANDS_SUPPRESS_BANNER"] = "1"
-        env["TTY_INTERACTIVE"] = "1"
-        env["TTY_COMPATIBLE"] = "1"
-
-        command = [
-            "openhands",
-            "--headless",
-            "-t",
-            task,
-            "--override-with-envs",
-        ]
-
-        try:
-            result = subprocess.run(
-                command,
-                cwd=project_dir,
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=900,
-                shell=False,
-            )
-
-            output = ""
-
-            if result.stdout:
-                output += f"STDOUT:\n{result.stdout}\n"
-
-            if result.stderr:
-                output += f"STDERR:\n{result.stderr}\n"
-
-            if result.returncode != 0:
-                return (
-                    f"OPENHANDS_FAILED\n"
-                    f"Exit code: {result.returncode}\n\n"
-                    f"{output}"
-                )
-
-            return (
-                f"OPENHANDS_SUCCESS\n"
-                f"{output}"
-            )
-
-        except FileNotFoundError:
-            return (
-                "OPENHANDS_FAILED\n"
-                "OpenHands CLI was not found. Run: openhands --help"
-            )
-
-        except subprocess.TimeoutExpired:
-            return "OPENHANDS_FAILED\nOpenHands timed out after 15 minutes."
-
-        except Exception as exc:
-            return f"OPENHANDS_FAILED\nUnexpected error: {exc}"
-
-
-def require_env(name: str) -> str:
-    value = os.getenv(name)
-    if not value:
-        raise RuntimeError(f"Missing required environment variable: {name}")
-    return value
-
-
-def build_llm() -> LLM:
-    api_key = (
-        os.getenv("GROQ_API_KEY")
-        or os.getenv("OPENROUTER_API_KEY")
-        or os.getenv("LLM_API_KEY")
-    )
-
-    if not api_key:
-        raise RuntimeError("Missing API key.")
-
-    return LLM(
-        model=require_env("LLM_MODEL"),
-        api_key=api_key,
-        base_url=require_env("LLM_BASE_URL"),
+def get_llm_response(messages: list[dict[str, str]]) -> str:
+    response = completion(
+        model=os.getenv("LLM_MODEL"),
+        api_key=os.getenv("OPENROUTER_API_KEY"),
+        api_base=os.getenv("LLM_BASE_URL"),
+        messages=messages,
         temperature=0.2,
     )
 
+    return response["choices"][0]["message"]["content"]
+
+
+def list_files(path: str = ".") -> str:
+    target = PROJECT_DIR / path
+
+    if not target.exists():
+        return f"Path does not exist: {path}"
+
+    ignored_dirs = {
+        ".git",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "bin",
+        "obj",
+        "node_modules",
+        ".vs",
+        ".idea",
+        ".vscode",
+        "dist",
+        "build",
+    }
+
+    result = []
+
+    for item in target.rglob("*"):
+        if any(part in ignored_dirs for part in item.parts):
+            continue
+
+        if item.is_file():
+            result.append(str(item.relative_to(PROJECT_DIR)))
+
+        if len(result) >= 200:
+            result.append("...file list truncated...")
+            break
+
+    return "\n".join(result) if result else "No files found."
+
+
+def read_file(path: str) -> str:
+    target = PROJECT_DIR / path
+
+    if not target.exists():
+        return f"File does not exist: {path}"
+
+    ignored_suffixes = {
+        ".dll",
+        ".exe",
+        ".pdb",
+        ".cache",
+        ".assets",
+        ".lock",
+        ".deps.json",
+        ".runtimeconfig.json",
+    }
+
+    if target.suffix.lower() in ignored_suffixes:
+        return f"Refused to read generated/binary file: {path}"
+
+    content = target.read_text(encoding="utf-8", errors="replace")
+
+    max_chars = 12000
+    if len(content) > max_chars:
+        return content[:max_chars] + "\n\n...file truncated..."
+
+    return content
+
+
+def write_file(path: str, content: str) -> str:
+    target = PROJECT_DIR / path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+
+    return f"File written: {path}"
+
+
+def run_command(command: str) -> str:
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_DIR,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        shell=True,
+        timeout=300,
+    )
+
+    output = ""
+
+    if result.stdout:
+        output += f"STDOUT:\n{result.stdout[-8000:]}\n"
+
+    if result.stderr:
+        output += f"STDERR:\n{result.stderr[-8000:]}\n"
+
+    output += f"Exit code: {result.returncode}"
+
+    return output
+
+
+def run_tool(tool: str, args: dict[str, Any]) -> str:
+    if tool == "list_files":
+        return list_files(args.get("path", "."))
+
+    if tool == "read_file":
+        return read_file(args["path"])
+
+    if tool == "write_file":
+        return write_file(args["path"], args["content"])
+
+    if tool == "run_command":
+        return run_command(args["command"])
+
+    return f"Unknown tool: {tool}"
+
+
+SYSTEM_PROMPT = """
+You are an autonomous coding agent.
+
+You can use these tools:
+1. list_files
+2. read_file
+3. write_file
+4. run_command
+
+You must respond with valid JSON only.
+
+JSON format:
+{
+  "thought": "short reasoning",
+  "actions": [
+    {
+      "tool": "tool_name",
+      "args": {}
+    }
+  ],
+  "done": false,
+  "final_answer": ""
+}
+
+Rules:
+- Use tools to inspect, create, update, and verify code.
+- Do not only explain code.
+- Actually create files using write_file.
+- Use run_command to run builds/tests.
+- For .NET apps, run dotnet build.
+- If a command fails, fix the code and run again.
+- When finished, set done=true and include summary in final_answer.
+- Return JSON only. No markdown.
+"""
+
+
+def parse_json_response(text: str) -> dict[str, Any]:
+    text = text.strip()
+
+    if text.startswith("```json"):
+        text = text.removeprefix("```json").removesuffix("```").strip()
+
+    if text.startswith("```"):
+        text = text.removeprefix("```").removesuffix("```").strip()
+
+    return json.loads(text)
+
+
+def run_agent(user_prompt: str, max_steps: int = 10) -> str:
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "user",
+            "content": (
+                f"User request:\n{user_prompt}\n\n"
+                f"Workspace path:\n{PROJECT_DIR}\n\n"
+                "Start by inspecting files, then perform the task."
+            ),
+        },
+    ]
+
+    def trim_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+        if len(messages) <= 8:
+            return messages
+
+        return [
+            messages[0],  # system prompt
+            messages[1],  # original user prompt
+            *messages[-6:]
+        ]
+
+    for step in range(1, max_steps + 1):
+        print(f"\n--- Agent step {step} ---")
+ 
+        messages = trim_messages(messages)
+        raw_response = get_llm_response(messages)
+
+
+        print(raw_response)
+
+        try:
+            agent_response = parse_json_response(raw_response)
+        except Exception as exc:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": f"Your previous response was invalid JSON. Error: {exc}. Return valid JSON only.",
+                }
+            )
+            continue
+
+        if agent_response.get("done"):
+            return agent_response.get("final_answer", "Done.")
+
+        actions = agent_response.get("actions", [])
+
+        if not actions:
+            messages.append(
+                {
+                    "role": "user",
+                    "content": "No actions were provided. Use tools to perform the task.",
+                }
+            )
+            continue
+
+        tool_results = []
+
+        for action in actions:
+            tool = action.get("tool")
+            args = action.get("args", {})
+
+            print(f"\nRunning tool: {tool}")
+            result = run_tool(tool, args)
+            print(result)
+
+            tool_results.append(
+                {
+                    "tool": tool,
+                    "args": args,
+                    "result": result,
+                }
+            )
+
+        messages.append(
+            {
+                "role": "assistant",
+                "content": raw_response,
+            }
+        )
+
+        messages.append(
+            {
+                "role": "user",
+                "content": (
+                    "Tool results:\n"
+                    + json.dumps(tool_results, indent=2)
+                    + "\n\nContinue. If the task is complete, return done=true."
+                ),
+            }
+        )
+
+    return "Agent stopped because max_steps was reached."
+
 
 def main() -> None:
-    llm = build_llm()
+    prompt = input("Enter coding request: ").strip()
 
-    developer = Agent(
-        role="Software Engineer",
-        goal="Use OpenHands to complete coding tasks in the local project.",
-        backstory=(
-            "You are a backend engineer. You must use OpenHands for file creation, "
-            "file editing, and terminal execution. Do not claim success if OpenHands fails."
-        ),
-        tools=[OpenHandsTool()],
-        llm=llm,
-        verbose=True,
-        allow_delegation=False,
-        max_iter=2,
-    )
+    if not prompt:
+        prompt = "create todo api dotnet app"
 
-    coding_task = Task(
-        description=(
-            "Use the open_hands_coding_agent tool to create a file named hello.py "
-            "in the project root. The file must contain exactly this Python code:\n\n"
-            "print('Hello from CrewAI and OpenHands.')\n\n"
-            "After creating the file, run this command:\n\n"
-            "python hello.py\n\n"
-            "If OpenHands returns OPENHANDS_FAILED, report the failure exactly. "
-            "Do not pretend the file was created."
-        ),
-        expected_output=(
-            "If successful: file name and command output. "
-            "If failed: the exact OpenHands failure."
-        ),
-        agent=developer,
-    )
-
-    crew = Crew(
-        agents=[developer],
-        tasks=[coding_task],
-        process=Process.sequential,
-        verbose=True,
-    )
-
-    result = crew.kickoff()
+    result = run_agent(prompt)
 
     print("\nFinal result:")
     print(result)

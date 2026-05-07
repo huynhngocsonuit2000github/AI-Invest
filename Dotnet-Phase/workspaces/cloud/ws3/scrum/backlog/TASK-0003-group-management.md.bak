@@ -1,0 +1,24 @@
+# Task 3: Group Management
+
+## Goal
+Implement group creation, editing, and deletion
+
+## Scope
+- Create group models and repositories
+- Implement group creation, editing, and deletion functionality
+
+## Technical Context
+-.NET 8
+- PostgreSQL
+- xUnit
+- JWT authentication
+
+## Expected Files or Areas
+- source/App.Api/Controllers/GroupsController.cs
+- source/App.Services/Services/GroupService.cs
+- source/App.Data/Repositories/GroupRepository.cs
+
+## Technical Tasks
+- Create group models and repositories
+- Implement group creation, editing, and deletion functionality
+- Create unit tests for group management functionality

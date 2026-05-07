@@ -1,0 +1,26 @@
+# Task 2: User Management
+
+## Goal
+Implement user registration, login, and profile management
+
+## Scope
+- Create user models and repositories
+- Implement user registration and login functionality
+- Implement user profile management
+
+## Technical Context
+-.NET 8
+- PostgreSQL
+- xUnit
+- JWT authentication
+
+## Expected Files or Areas
+- source/App.Api/Controllers/UsersController.cs
+- source/App.Services/Services/UserService.cs
+- source/App.Data/Repositories/UserRepository.cs
+
+## Technical Tasks
+- Create user models and repositories
+- Implement user registration and login functionality
+- Implement user profile management
+- Create unit tests for user management functionality

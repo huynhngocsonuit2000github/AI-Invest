@@ -1,0 +1,26 @@
+# Todo App Product Spec
+
+## Overview
+The Todo App is a web application that allows users to manage their todos, organized by groups and roles.
+
+## Target Users
+- Users: individuals who will be using the app to manage their todos
+- Admins: users with elevated privileges to manage groups and roles
+
+## Main Features
+- User management: registration, login, and profile management
+- Group management: create, edit, and delete groups
+- Role management: assign roles to users and groups
+- Todo management: create, edit, and delete todos
+- JWT authentication
+
+## Business Rules
+- A user can be part of multiple groups
+- A group can have multiple users
+- A role can be assigned to multiple users and groups
+- Todos are owned by a user and can be shared with groups
+
+## User Stories
+- As a user, I want to register and login to the app
+- As a user, I want to create and manage my todos
+- As an admin, I want to manage groups and roles

@@ -1,0 +1,24 @@
+# Task 4: Role Management
+
+## Goal
+Implement role creation, editing, and deletion
+
+## Scope
+- Create role models and repositories
+- Implement role creation, editing, and deletion functionality
+
+## Technical Context
+-.NET 8
+- PostgreSQL
+- xUnit
+- JWT authentication
+
+## Expected Files or Areas
+- source/App.Api/Controllers/RolesController.cs
+- source/App.Services/Services/RoleService.cs
+- source/App.Data/Repositories/RoleRepository.cs
+
+## Technical Tasks
+- Create role models and repositories
+- Implement role creation, editing, and deletion functionality
+- Create unit tests for role management functionality

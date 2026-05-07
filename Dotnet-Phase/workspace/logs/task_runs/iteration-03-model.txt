@@ -5,41 +5,6 @@
     {
       "tool": "write_file",
       "args": {
-        "path": "TodoApp/Models/Role.cs",
-        "content": "using System.ComponentModel.DataAnnotations;\nnamespace TodoApp.Models\n{\n    public class Role\n    {\n        public int Id { get; set; }\n        [Required]\n        public string Name { get; set; }\n        public ICollection<User> Users { get; set; }\n    }\n}"
-      }
-    },
-    {
-      "tool": "write_file",
-      "args": {
-        "path": "TodoApp/Models/Todo.cs",
-        "content": "using System.ComponentModel.DataAnnotations;\nnamespace TodoApp.Models\n{\n    public class Todo\n    {\n        public int Id { get; set; }\n        [Required]\n        public string Title { get; set; }\n        public bool Completed { get; set; }\n        public User User { get; set; }\n    }\n}"
-      }
-    },
-    {
-      "tool": "write_file",
-      "args": {
-        "path": "TodoApp/DTOs/UserDTO.cs",
-        "content": "using System.ComponentModel.DataAnnotations;\nnamespace TodoApp.DTOs\n{\n    public class UserDTO\n    {\n        [Required]\n        public string Username { get; set; }\n        [Required]\n        public string Password { get; set; }\n    }\n}"
-      }
-    },
-    {
-      "tool": "write_file",
-      "args": {
-        "path": "TodoApp/DTOs/TodoDTO.cs",
-        "content": "using System.ComponentModel.DataAnnotations;\nnamespace TodoApp.DTOs\n{\n    public class TodoDTO\n    {\n        [Required]\n        public string Title { get; set; }\n    }\n}"
-      }
-    },
-    {
-      "tool": "write_file",
-      "args": {
-        "path": "TodoApp/Services/UserService.cs",
-        "content": "using TodoApp.Models;\nusing TodoApp.DTOs;\nnamespace TodoApp.Services\n{\n    public class UserService\n    {\n        private readonly TodoAppContext _context;\n        public UserService(TodoAppContext context)\n        {\n            _context = context;\n        }\n        public async Task<IEnumerable<User>> GetUsers()\n        {\n            return await _context.Users.ToListAsync();\n        }\n        public async Task<User> GetUser(int id)\n        {\n            return await _context.Users.FindAsync(id);\n        }\n        public async Task CreateUser(UserDTO userDTO)\n        {\n            var user = new User { Username = userDTO.Username, Password = userDTO.Password };\n            _context.Users.Add(user);\n            await _context.SaveChangesAsync();\n        }\n    }\n}"
-      }
-    },
-    {
-      "tool": "write_file",
-      "args": {
         "path": "TodoApp/Services/TodoService.cs",
         "content": "using TodoApp.Models;\nusing TodoApp.DTOs;\nnamespace TodoApp.Services\n{\n    public class TodoService\n    {\n        private readonly TodoAppContext _context;\n        public TodoService(TodoAppContext context)\n        {\n            _context = context;\n        }\n        public async Task<IEnumerable<Todo>> GetTodos()\n        {\n            return await _context.Todos.ToListAsync();\n        }\n        public async Task<Todo> GetTodo(int id)\n        {\n            return await _context.Todos.FindAsync(id);\n        }\n        public async Task CreateTodo(TodoDTO todoDTO)\n        {\n            var todo = new Todo { Title = todoDTO.Title };\n            _context.Todos.Add(todo);\n            await _context.SaveChangesAsync();\n        }\n    }\n}"
       }

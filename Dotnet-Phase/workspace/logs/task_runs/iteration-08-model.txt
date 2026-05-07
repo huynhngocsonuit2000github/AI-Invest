@@ -1,0 +1,30 @@
+```json
+{
+  "thoughtSummary": "Resolving Entity Framework Core reference issues",
+  "actions": [
+    {
+      "tool": "run_command",
+      "args": {
+        "command": "dotnet add package Microsoft.EntityFrameworkCore.SqlServer",
+        "workingDirectory": "D:\\me\\AI Investigation\\Dotnet-Phase\\workspace\\TodoApp"
+      }
+    },
+    {
+      "tool": "run_command",
+      "args": {
+        "command": "dotnet add package Microsoft.EntityFrameworkCore.Design",
+        "workingDirectory": "D:\\me\\AI Investigation\\Dotnet-Phase\\workspace\\TodoApp"
+      }
+    },
+    {
+      "tool": "run_command",
+      "args": {
+        "command": "dotnet build",
+        "workingDirectory": "D:\\me\\AI Investigation\\Dotnet-Phase\\workspace\\TodoApp"
+      }
+    }
+  ],
+  "done": false,
+  "finalAnswer": null
+}
+```

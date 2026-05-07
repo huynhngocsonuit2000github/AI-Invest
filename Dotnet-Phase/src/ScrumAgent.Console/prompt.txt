@@ -1,0 +1,20 @@
+Create project planning files for a .NET 8 todo app with users, groups, roles, and RBAC. Do not create source code yet.
+
+Use only JSON tool actions.
+
+Create these files:
+- docs/product/todo-app-product-spec.md
+- docs/architecture/todo-app-architecture.md
+- docs/api/todo-app-api-plan.md
+- scrum/backlog/TASK-0001-project-setup.md
+- scrum/backlog/TASK-0002-user-module.md
+- scrum/backlog/TASK-0003-group-module.md
+- scrum/backlog/TASK-0004-role-module.md
+- scrum/backlog/TASK-0005-todo-module.md
+- scrum/backlog/TASK-0006-auth-rbac.md
+- scrum/backlog/TASK-0007-tests.md
+- memory/business_rules.md
+- memory/coding_conventions.md
+- memory/test_knowledge.md
+
+Use .NET 8 Web API, EF Core, PostgreSQL, JWT, controller-service-repository structure, DTOs, async methods, and xUnit tests.

@@ -1,10 +1,8 @@
 using ScrumAgent.ConsoleApp;
 using System.Text.Json;
 
-//var prompt = "Create project planning files for a todo app with users, groups, and roles. Do not create source code yet.";
-var prompt = "Create project planning files for a .NET 8 todo app with users, groups, roles, and RBAC. Do not create source code yet.\r\n\r\nUse only JSON tool actions.\r\n\r\nCreate these files:\r\n- docs/product/todo-app-product-spec.md\r\n- docs/architecture/todo-app-architecture.md\r\n- docs/api/todo-app-api-plan.md\r\n- scrum/backlog/TASK-0001-project-setup.md\r\n- scrum/backlog/TASK-0002-user-module.md\r\n- scrum/backlog/TASK-0003-group-module.md\r\n- scrum/backlog/TASK-0004-role-module.md\r\n- scrum/backlog/TASK-0005-todo-module.md\r\n- scrum/backlog/TASK-0006-auth-rbac.md\r\n- scrum/backlog/TASK-0007-tests.md\r\n- memory/business_rules.md\r\n- memory/coding_conventions.md\r\n- memory/test_knowledge.md\r\n\r\nUse .NET 8 Web API, EF Core, PostgreSQL, JWT, controller-service-repository structure, DTOs, async methods, and xUnit tests.";
-
 var settings = LoadSettings();
+var prompt = await LoadPromptAsync(settings.PromptPath, CancellationToken.None);
 var workspace = settings.ProjectDir;
 
 Directory.CreateDirectory(workspace);
@@ -65,7 +63,8 @@ static AgentSettings LoadSettings()
         apiKey,
         baseUrl,
         model,
-        OptionalSetting(root, "PROJECT_DIR") ?? Path.Combine(Directory.GetCurrentDirectory(), "workspace"));
+        OptionalSetting(root, "PROJECT_DIR") ?? Path.Combine(Directory.GetCurrentDirectory(), "workspace"),
+        OptionalSetting(root, "PROMPT_FILE") ?? "prompt.txt");
 }
 
 static string FindSettingsFile()
@@ -145,6 +144,34 @@ static string? OptionalSetting(JsonElement root, string name)
         : null;
 }
 
+static async Task<string> LoadPromptAsync(string promptPath, CancellationToken cancellationToken)
+{
+    var path = ResolveConfigFile(promptPath);
+
+    if (!File.Exists(path))
+        throw new FileNotFoundException($"Missing prompt file: {path}");
+
+    var prompt = await File.ReadAllTextAsync(path, cancellationToken);
+    if (string.IsNullOrWhiteSpace(prompt))
+        throw new InvalidOperationException($"Prompt file is empty: {path}");
+
+    return prompt.Trim();
+}
+
+static string ResolveConfigFile(string path)
+{
+    if (Path.IsPathFullyQualified(path))
+        return path;
+
+    var candidates = new[]
+    {
+        Path.Combine(Directory.GetCurrentDirectory(), path),
+        Path.Combine(AppContext.BaseDirectory, path)
+    };
+
+    return candidates.FirstOrDefault(File.Exists) ?? candidates[0];
+}
+
 static void BootstrapWorkspace(string workspace)
 {
     var directories = new[]
@@ -196,4 +223,4 @@ static void WriteFileIfMissing(string workspace, string relativePath, string con
     }
 }
 
-readonly record struct AgentSettings(string Provider, string? ApiKey, string BaseUrl, string Model, string ProjectDir);
+readonly record struct AgentSettings(string Provider, string? ApiKey, string BaseUrl, string Model, string ProjectDir, string PromptPath);

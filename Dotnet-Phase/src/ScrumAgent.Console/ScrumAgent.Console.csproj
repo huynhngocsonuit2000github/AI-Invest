@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('appsettings.json')" />
+    <None Update="prompt.txt" CopyToOutputDirectory="PreserveNewest" Condition="Exists('prompt.txt')" />
   </ItemGroup>
 </Project>

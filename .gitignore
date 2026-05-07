@@ -5,3 +5,8 @@ agent-scrum/**/bin/*
 **/bin/*
 **/.vs/*
 Dotnet-Phase/workspace3/logs/task_runs/*
+Dotnet-Phase/workspace4/logs/task_runs/*
+Dotnet-Phase/workspace5/logs/task_runs/*
+Dotnet-Phase/workspace6/logs/task_runs/*
+Dotnet-Phase/workspace7/logs/task_runs/*
+Dotnet-Phase/workspace8/logs/task_runs/*

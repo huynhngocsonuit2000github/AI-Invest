@@ -66,9 +66,10 @@ public sealed class AgentLoop
             {
                 if (agentResponse.Done && executedToolCount > 0)
                 {
+                    var finalAnswer = BuildFinalAnswer(agentResponse, []);
                     System.Console.WriteLine("\nDone.");
-                    System.Console.WriteLine(agentResponse.FinalAnswer ?? string.Empty);
-                    await _logger.WriteAsync("task_runs/final-answer.md", agentResponse.FinalAnswer ?? string.Empty, cancellationToken);
+                    System.Console.WriteLine(finalAnswer);
+                    await _logger.WriteAsync("task_runs/final-answer.md", finalAnswer, cancellationToken);
                     return;
                 }
 
@@ -91,9 +92,10 @@ public sealed class AgentLoop
 
             if (agentResponse.Done && actionsToRun.Count == agentResponse.Actions.Count && results.All(x => x.Success))
             {
+                var finalAnswer = BuildFinalAnswer(agentResponse, results);
                 System.Console.WriteLine("\nDone.");
-                System.Console.WriteLine(agentResponse.FinalAnswer ?? string.Empty);
-                await _logger.WriteAsync("task_runs/final-answer.md", agentResponse.FinalAnswer ?? string.Empty, cancellationToken);
+                System.Console.WriteLine(finalAnswer);
+                await _logger.WriteAsync("task_runs/final-answer.md", finalAnswer, cancellationToken);
                 return;
             }
 
@@ -558,6 +560,25 @@ Set done=false until all required actions have been executed.
         }
 
         return "Tool results:\n" + resultJson + "\nContinue. If the task is complete, return done=true.";
+    }
+
+    private static string BuildFinalAnswer(AgentResponse response, IReadOnlyList<ToolResult> results)
+    {
+        if (!string.IsNullOrWhiteSpace(response.FinalAnswer))
+            return response.FinalAnswer;
+
+        if (results.Count == 0)
+            return "Task completed. No final summary was provided by the model.";
+
+        var successfulOutputs = results
+            .Where(x => x.Success && !string.IsNullOrWhiteSpace(x.Output))
+            .Select(x => $"- {x.Output}")
+            .ToArray();
+
+        if (successfulOutputs.Length == 0)
+            return "Task completed. Tool actions finished without a model-provided final summary.";
+
+        return "Task completed. Tool results:\n" + string.Join(Environment.NewLine, successfulOutputs);
     }
 
     private static string FormatParseError(int iteration, string raw, string error)

@@ -1,0 +1,10 @@
+using System.Threading.Tasks;
+using System.Collections.Generic;
+
+namespace TodoApp.Services
+{
+    public interface IUserService
+    {
+        Task<IEnumerable<User>> GetUsersAsync();
+    }
+}

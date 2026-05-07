@@ -25,6 +25,10 @@ public sealed class OpenAiResponsesClient
         {
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         }
+
+        Console.WriteLine(_httpClient.DefaultRequestHeaders.Authorization?.Scheme);
+        Console.WriteLine(string.IsNullOrWhiteSpace(apiKey));
+        Console.WriteLine(apiKey?.StartsWith("sk-or-v1-"));
     }
 
     public async Task<string> CompleteAsync(IReadOnlyList<ConversationItem> messages, CancellationToken cancellationToken)

@@ -1,0 +1,9 @@
+using System.Threading.Tasks;
+
+namespace TodoApp.Repositories
+{
+    public interface IUserRepository
+    {
+        Task<IEnumerable<User>> GetUsersAsync();
+    }
+}

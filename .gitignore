@@ -5,3 +5,5 @@ agent-scrum/**/bin/*
 **/bin/*
 **/.vs/*
 Dotnet-Phase/workspaces/**/task_runs/*
+Dotnet-Phase/**/.nuget/*
+Dotnet-Phase/.dotnet-cli-home/*

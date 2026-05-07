@@ -32,6 +32,8 @@ public sealed class AgentLoop
 
         var dateTime = DateTime.UtcNow;
         var executedToolCount = 0;
+        var wroteSourceFile = false;
+        var buildSucceeded = false;
 
         for (var iteration = 1; iteration <= 20; iteration++)
         {
@@ -64,7 +66,8 @@ public sealed class AgentLoop
 
             if (agentResponse.Actions.Count == 0)
             {
-                if (agentResponse.Done && executedToolCount > 0)
+                string? completionError = null;
+                if (agentResponse.Done && executedToolCount > 0 && CanFinish(userPrompt, wroteSourceFile, buildSucceeded, out completionError))
                 {
                     var finalAnswer = BuildFinalAnswer(agentResponse, []);
                     System.Console.WriteLine("\nDone.");
@@ -73,7 +76,7 @@ public sealed class AgentLoop
                     return;
                 }
 
-                messages.Add(new("user", BuildNoActionPrompt(userPrompt, executedToolCount)));
+                messages.Add(new("user", completionError ?? BuildNoActionPrompt(userPrompt, executedToolCount)));
                 continue;
             }
 
@@ -85,12 +88,18 @@ public sealed class AgentLoop
                 var result = await _tools.ExecuteAsync(action, cancellationToken);
                 results.Add(result);
                 executedToolCount++;
+                wroteSourceFile = wroteSourceFile || DidWriteSourceFile(action, result);
+                buildSucceeded = buildSucceeded || DidBuildSucceed(action, result);
                 await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/tool-results.md", FormatResult(result), cancellationToken);
             }
 
             var resultJson = JsonSerializer.Serialize(results, _jsonOptions);
+            string? completionErrorAfterActions = null;
 
-            if (agentResponse.Done && actionsToRun.Count == agentResponse.Actions.Count && results.All(x => x.Success))
+            if (agentResponse.Done
+                && actionsToRun.Count == agentResponse.Actions.Count
+                && results.All(x => x.Success)
+                && CanFinish(userPrompt, wroteSourceFile, buildSucceeded, out completionErrorAfterActions))
             {
                 var finalAnswer = BuildFinalAnswer(agentResponse, results);
                 System.Console.WriteLine("\nDone.");
@@ -100,7 +109,7 @@ public sealed class AgentLoop
             }
 
             messages.Add(new("assistant", raw));
-            messages.Add(new("user", BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count)));
+            messages.Add(new("user", completionErrorAfterActions ?? BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count)));
         }
 
         System.Console.WriteLine("Stopped after max iterations.");
@@ -203,6 +212,63 @@ Use descriptive task-specific filenames. Never use literal placeholder filenames
 Original user request:
 {{userPrompt}}
 """;
+    }
+
+    private static bool CanFinish(string userPrompt, bool wroteSourceFile, bool buildSucceeded, out string? error)
+    {
+        error = null;
+
+        if (!IsImplementationPrompt(userPrompt))
+            return true;
+
+        if (!wroteSourceFile)
+        {
+            error = """
+The task is not complete. No source files were written under source/.
+Return tool actions that create or update the requested project files under source/, then run the required build command.
+""";
+            return false;
+        }
+
+        if (RequiresBuild(userPrompt) && !buildSucceeded)
+        {
+            error = """
+The task is not complete. The prompt requires running a build, but no successful build tool result has been recorded.
+Return a run_command action for the build, using the correct project workingDirectory.
+""";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsImplementationPrompt(string prompt)
+    {
+        return prompt.Contains("implement", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("create a .net", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("create source code", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("under source/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool RequiresBuild(string prompt)
+    {
+        return prompt.Contains("build", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool DidWriteSourceFile(AgentAction action, ToolResult result)
+    {
+        return result.Success
+            && action.Tool.Equals("write_file", StringComparison.OrdinalIgnoreCase)
+            && action.Args.TryGetValue("path", out var path)
+            && path.Replace('\\', '/').StartsWith("source/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool DidBuildSucceed(AgentAction action, ToolResult result)
+    {
+        return result.Success
+            && action.Tool.Equals("run_command", StringComparison.OrdinalIgnoreCase)
+            && action.Args.TryGetValue("command", out var command)
+            && command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase);
     }
 
     private AgentResponse ParseAgentResponse(string raw)

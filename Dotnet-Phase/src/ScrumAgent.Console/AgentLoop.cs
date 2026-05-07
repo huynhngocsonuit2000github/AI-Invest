@@ -4,10 +4,6 @@ namespace ScrumAgent.ConsoleApp;
 
 public sealed class AgentLoop
 {
-    private const int MaxToolOutputCharsForModel = 3000;
-    private const int MaxToolErrorCharsForModel = 1500;
-    private const int MaxInvalidResponsePreviewChars = 1200;
-
     private readonly OpenAiResponsesClient _llmClient;
     private readonly ToolRegistry _tools;
     private readonly WorkspaceLogger _logger;
@@ -28,12 +24,11 @@ public sealed class AgentLoop
 
     public async Task RunAsync(string userPrompt, CancellationToken cancellationToken)
     {
-        var baseMessages = new List<ConversationItem>
+        var messages = new List<ConversationItem>
         {
             new("developer", BuildDeveloperPrompt()),
             new("user", userPrompt)
         };
-        var messages = new List<ConversationItem>(baseMessages);
 
         var dateTime = DateTime.UtcNow;
         var executedToolCount = 0;
@@ -56,7 +51,8 @@ public sealed class AgentLoop
                 var error = $"Invalid model response: {ex.Message}";
                 System.Console.WriteLine(error);
                 await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/parse-errors.md", FormatParseError(iteration, raw, error), cancellationToken);
-                messages = BuildNextMessages(baseMessages, BuildInvalidResponsePrompt(userPrompt, raw));
+                messages.Add(new("assistant", raw));
+                messages.Add(new("user", BuildInvalidResponsePrompt(userPrompt)));
                 continue;
             }
 
@@ -67,12 +63,6 @@ public sealed class AgentLoop
                     .ToList()
             };
             System.Console.WriteLine(agentResponse.ThoughtSummary);
-
-            if (TryBuildForbiddenSourceActionError(userPrompt, agentResponse.Actions, out var forbiddenSourceError))
-            {
-                messages = BuildNextMessages(baseMessages, forbiddenSourceError);
-                continue;
-            }
 
             if (agentResponse.Actions.Count == 0)
             {
@@ -86,7 +76,7 @@ public sealed class AgentLoop
                     return;
                 }
 
-                messages = BuildNextMessages(baseMessages, completionError ?? BuildNoActionPrompt(executedToolCount));
+                messages.Add(new("user", completionError ?? BuildNoActionPrompt(userPrompt, executedToolCount)));
                 continue;
             }
 
@@ -103,7 +93,7 @@ public sealed class AgentLoop
                 await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/tool-results.md", FormatResult(result), cancellationToken);
             }
 
-            var resultJson = JsonSerializer.Serialize(CompactResultsForModel(results), _jsonOptions);
+            var resultJson = JsonSerializer.Serialize(results, _jsonOptions);
             string? completionErrorAfterActions = null;
 
             if (agentResponse.Done
@@ -118,23 +108,11 @@ public sealed class AgentLoop
                 return;
             }
 
-            messages = BuildNextMessages(
-                baseMessages,
-                completionErrorAfterActions ?? BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count));
+            messages.Add(new("assistant", raw));
+            messages.Add(new("user", completionErrorAfterActions ?? BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count)));
         }
 
         System.Console.WriteLine("Stopped after max iterations.");
-    }
-
-    private static List<ConversationItem> BuildNextMessages(
-        IReadOnlyList<ConversationItem> baseMessages,
-        string continuationPrompt)
-    {
-        var messages = new List<ConversationItem>(baseMessages)
-        {
-            new("user", continuationPrompt)
-        };
-        return messages;
     }
 
     private string BuildDeveloperPrompt()
@@ -194,21 +172,16 @@ When finished:
 """;
     }
 
-    private static string BuildInvalidResponsePrompt(string userPrompt, string rawResponse)
+    private static string BuildInvalidResponsePrompt(string userPrompt)
     {
-        var actionGuidance = IsSourceCreationForbidden(userPrompt)
-            ? "Use write_file actions only for planning files under docs/, scrum/backlog/, and memory/. Do not use source/ paths or dotnet commands."
-            : "Use tool actions to continue the original request.";
-        var responsePreview = TruncateForModel(rawResponse.ReplaceLineEndings(" ").Trim(), MaxInvalidResponsePreviewChars);
-
         return $$"""
 Your previous response was not valid JSON for the required schema.
 Return exactly one JSON object and no other text.
 The first character must be { and the last character must be }.
-{{actionGuidance}}
+You must continue the original user request by using tool actions.
 
-Invalid response preview:
-{{responsePreview}}
+Original user request:
+{{userPrompt}}
 
 Use this shape:
 {
@@ -228,22 +201,22 @@ Use this shape:
 """;
     }
 
-    private static string BuildNoActionPrompt(int executedToolCount)
+    private static string BuildNoActionPrompt(string userPrompt, int executedToolCount)
     {
         return $$"""
 No executable tool actions were provided. Tool executions so far: {{executedToolCount}}.
 Do not set done=true until tool results prove the task is complete.
 Continue the original user request by returning write_file/create_directory actions.
 Use descriptive task-specific filenames. Never use literal placeholder filenames such as example.md, task-specific-file-name.md, or placeholder.md.
+
+Original user request:
+{{userPrompt}}
 """;
     }
 
     private static bool CanFinish(string userPrompt, bool wroteSourceFile, bool buildSucceeded, out string? error)
     {
         error = null;
-
-        if (IsSourceCreationForbidden(userPrompt))
-            return true;
 
         if (!IsImplementationPrompt(userPrompt))
             return true;
@@ -271,11 +244,10 @@ Return a run_command action for the build, using the correct project workingDire
 
     private static bool IsImplementationPrompt(string prompt)
     {
-        return !IsSourceCreationForbidden(prompt)
-            && (prompt.Contains("implement", StringComparison.OrdinalIgnoreCase)
+        return prompt.Contains("implement", StringComparison.OrdinalIgnoreCase)
             || prompt.Contains("create a .net", StringComparison.OrdinalIgnoreCase)
             || prompt.Contains("create source code", StringComparison.OrdinalIgnoreCase)
-            || prompt.Contains("under source/", StringComparison.OrdinalIgnoreCase));
+            || prompt.Contains("under source/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool RequiresBuild(string prompt)
@@ -297,87 +269,6 @@ Return a run_command action for the build, using the correct project workingDire
             && action.Tool.Equals("run_command", StringComparison.OrdinalIgnoreCase)
             && action.Args.TryGetValue("command", out var command)
             && command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool TryBuildForbiddenSourceActionError(
-        string userPrompt,
-        IReadOnlyList<AgentAction> actions,
-        out string error)
-    {
-        error = string.Empty;
-
-        if (!IsSourceCreationForbidden(userPrompt))
-            return false;
-
-        var forbiddenActions = actions
-            .Where(IsSourceCreationAction)
-            .Select(DescribeAction)
-            .ToArray();
-
-        if (forbiddenActions.Length == 0)
-            return false;
-
-        error = $"""
-The user explicitly said not to create source code yet.
-These proposed actions are blocked and were not executed:
-{string.Join(Environment.NewLine, forbiddenActions.Select(x => "- " + x))}
-
-Return planning-only actions under docs/, scrum/backlog/, and memory/.
-Do not write files under source/.
-Do not create source directories.
-Do not run dotnet new, dotnet build, dotnet add, or other implementation commands.
-""";
-        return true;
-    }
-
-    private static bool IsSourceCreationForbidden(string prompt)
-    {
-        return prompt.Contains("do not create source code", StringComparison.OrdinalIgnoreCase)
-            || prompt.Contains("do not create application source code", StringComparison.OrdinalIgnoreCase)
-            || prompt.Contains("do not create code", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool IsSourceCreationAction(AgentAction action)
-    {
-        var tool = action.Tool;
-        var path = action.Args.TryGetValue("path", out var actionPath)
-            ? actionPath.Replace('\\', '/')
-            : string.Empty;
-        var workingDirectory = action.Args.TryGetValue("workingDirectory", out var wd)
-            ? wd.Replace('\\', '/')
-            : string.Empty;
-        var command = action.Args.TryGetValue("command", out var cmd)
-            ? cmd
-            : string.Empty;
-
-        if ((tool.Equals("write_file", StringComparison.OrdinalIgnoreCase)
-                || tool.Equals("create_directory", StringComparison.OrdinalIgnoreCase)
-                || tool.Equals("touch_file", StringComparison.OrdinalIgnoreCase)
-                || tool.Equals("replace_in_file", StringComparison.OrdinalIgnoreCase))
-            && path.StartsWith("source/", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!tool.Equals("run_command", StringComparison.OrdinalIgnoreCase))
-            return false;
-
-        return workingDirectory.StartsWith("source/", StringComparison.OrdinalIgnoreCase)
-            || command.Contains("dotnet new", StringComparison.OrdinalIgnoreCase)
-            || command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase)
-            || command.Contains("dotnet add", StringComparison.OrdinalIgnoreCase)
-            || command.Contains("dotnet restore", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string DescribeAction(AgentAction action)
-    {
-        if (action.Args.TryGetValue("path", out var path))
-            return $"{action.Tool} {path}";
-
-        if (action.Args.TryGetValue("command", out var command))
-            return $"{action.Tool} {command}";
-
-        return action.Tool;
     }
 
     private AgentResponse ParseAgentResponse(string raw)
@@ -702,27 +593,6 @@ Do not run dotnet new, dotnet build, dotnet add, or other implementation command
             : normalized[..240] + "...";
     }
 
-    private static IReadOnlyList<ModelToolResult> CompactResultsForModel(IEnumerable<ToolResult> results)
-    {
-        return results
-            .Select(result => new ModelToolResult(
-                result.Tool,
-                result.Success,
-                TruncateForModel(result.Output, MaxToolOutputCharsForModel),
-                string.IsNullOrWhiteSpace(result.Error)
-                    ? null
-                    : TruncateForModel(result.Error, MaxToolErrorCharsForModel)))
-            .ToArray();
-    }
-
-    private static string TruncateForModel(string? value, int maxChars)
-    {
-        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
-            return value ?? string.Empty;
-
-        return value[..maxChars] + $"\n...[truncated {value.Length - maxChars} chars; full output is in logs]";
-    }
-
     private static string FormatResult(ToolResult result)
     {
         return $"""
@@ -796,10 +666,4 @@ Raw response:
 
 """;
     }
-
-    private sealed record ModelToolResult(
-        string Tool,
-        bool Success,
-        string Output,
-        string? Error);
 }

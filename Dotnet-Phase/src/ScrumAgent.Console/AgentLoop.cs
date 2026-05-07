@@ -48,7 +48,7 @@ public sealed class AgentLoop
             {
                 var error = $"Invalid model response: {ex.Message}";
                 System.Console.WriteLine(error);
-                await _logger.AppendAsync("task_runs/parse-errors.md", FormatParseError(iteration, raw, error), cancellationToken);
+                await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/parse-errors.md", FormatParseError(iteration, raw, error), cancellationToken);
                 messages.Add(new("assistant", raw));
                 messages.Add(new("user", BuildInvalidResponsePrompt(userPrompt)));
                 continue;
@@ -69,7 +69,7 @@ public sealed class AgentLoop
                     var finalAnswer = BuildFinalAnswer(agentResponse, []);
                     System.Console.WriteLine("\nDone.");
                     System.Console.WriteLine(finalAnswer);
-                    await _logger.WriteAsync("task_runs/final-answer.md", finalAnswer, cancellationToken);
+                    await _logger.WriteAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/final-answer.md", finalAnswer, cancellationToken);
                     return;
                 }
 
@@ -85,7 +85,7 @@ public sealed class AgentLoop
                 var result = await _tools.ExecuteAsync(action, cancellationToken);
                 results.Add(result);
                 executedToolCount++;
-                await _logger.AppendAsync("task_runs/tool-results.md", FormatResult(result), cancellationToken);
+                await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/tool-results.md", FormatResult(result), cancellationToken);
             }
 
             var resultJson = JsonSerializer.Serialize(results, _jsonOptions);
@@ -95,7 +95,7 @@ public sealed class AgentLoop
                 var finalAnswer = BuildFinalAnswer(agentResponse, results);
                 System.Console.WriteLine("\nDone.");
                 System.Console.WriteLine(finalAnswer);
-                await _logger.WriteAsync("task_runs/final-answer.md", finalAnswer, cancellationToken);
+                await _logger.WriteAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/final-answer.md", finalAnswer, cancellationToken);
                 return;
             }
 

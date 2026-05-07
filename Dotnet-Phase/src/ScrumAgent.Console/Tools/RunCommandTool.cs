@@ -18,6 +18,15 @@ public sealed class RunCommandTool : IWorkspaceTool
         _guard.ValidateCommand(command, workingDirectory);
         var fullWorkingDirectory = _guard.ResolvePath(workingDirectory);
 
+        if (!Directory.Exists(fullWorkingDirectory))
+        {
+            return new ToolResult(
+                Name,
+                false,
+                string.Empty,
+                $"Working directory does not exist: {workingDirectory}. Use an existing workingDirectory, usually '.', or create the directory first.");
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = OperatingSystem.IsWindows() ? "cmd.exe" : "/bin/bash",

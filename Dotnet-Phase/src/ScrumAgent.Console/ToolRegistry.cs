@@ -33,6 +33,17 @@ public sealed class ToolRegistry
             return new ToolResult("emptytool", false, $"Unknown tool: {action.Tool}");
         }
 
-        return await tool.ExecuteAsync(action.Args!, cancellationToken);
+        try
+        {
+            return await tool.ExecuteAsync(action.Args!, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return new ToolResult(action.Tool, false, string.Empty, ex.Message);
+        }
     }
 }

@@ -186,6 +186,7 @@ GENERAL RULES:
 - Use touch_file only when an empty placeholder file is required.
 - Use replace_in_file for targeted updates.
 - Use run_command only for safe commands such as dotnet, git, npm, mkdir, ls, dir.
+- run_command workingDirectory must already exist. Use "." for commands that create new folders with -o or output paths.
 - After source code changes, run build/test if possible.
 - Create logs or task files under scrum/ and logs/ when useful.
 - Do not claim success unless the required tool output proves it.
@@ -245,19 +246,21 @@ PROJECT NAMING RULES:
 - .NET project, namespace, folder, and solution names must use the derived project name consistently.
 
 .NET BACKEND STRUCTURE RULES:
-- For .NET backend/API projects, prefer this structure:
+- For new .NET backend/API projects, prefer a simple single-project structure first.
+- Create one Web API project and put implementation folders inside that project:
   - source/{ProjectName}.sln
-  - source/src/{ProjectName}.Api
-  - source/src/{ProjectName}.Application
-  - source/src/{ProjectName}.Domain
-  - source/src/{ProjectName}.Infrastructure
-  - source/tests/{ProjectName}.Tests
-- Do not create generic source/App.Api, source/App.Services, source/App.Repositories, or source/App.Tests paths.
-- Do not use separate Services and Repositories projects unless an existing architecture document explicitly requires that split.
-- Put service interfaces and application DTOs in the Application project.
-- Put entities and domain enums in the Domain project.
-- Put EF Core DbContext, migrations, and repository implementations in the Infrastructure project.
-- Put API controllers and startup/configuration in the Api project.
+  - source/{ProjectName}.Api/{ProjectName}.Api.csproj
+  - source/{ProjectName}.Api/Controllers
+  - source/{ProjectName}.Api/Services
+  - source/{ProjectName}.Api/Repositories
+  - source/{ProjectName}.Api/Models
+  - source/{ProjectName}.Api/Dtos
+  - source/{ProjectName}.Api/Data
+  - source/{ProjectName}.Api/Auth
+  - source/{ProjectName}.Api/Tests
+- Do not create separate class library projects for Application, Domain, Infrastructure, Services, Repositories, or Tests during initial setup.
+- Do not create source/src/{ProjectName}.Application, source/src/{ProjectName}.Domain, source/src/{ProjectName}.Infrastructure, source/tests/{ProjectName}.Tests, source/App.Services, or source/App.Repositories.
+- Put services, repositories, DTOs, entities/models, DbContext, auth helpers, and tests in folders inside the single API project until the user asks to split projects.
 
 BACKLOG TASK RULES:
 - Create 5 to 10 backlog task files depending on project complexity.
@@ -276,16 +279,17 @@ Recommended backlog task pattern:
 - scrum/backlog/TASK-0005-tests.md
 
 TASK-0001 must include:
-- create actual source project
-- create project file or package manifest
+- create one actual source project
+- create one project file or package manifest
 - create application entry point
 - create configuration file when relevant
-- create base architecture folders
+- create base folders inside the one project
 - create initial health or smoke-test endpoint when relevant
 - configure basic framework services
 - run build
 - use the explicit requested framework, for example `--framework net8.0` for .NET 8
 - create only setup/skeleton code, not business modules
+- do not create separate class library projects
 - do not create the initial database schema, EF migrations, or run `dotnet ef database update`; those belong to persistence or feature implementation tasks after entities exist
 
 Infer task names from the user's requested domain and features.
@@ -693,12 +697,12 @@ Do not run dotnet new, dotnet build, dotnet add, dotnet restore, or other implem
             return false;
 
         error = $"""
-These proposed actions use generic App.* project names and were not executed:
+These proposed actions use a blocked generic or multi-project structure and were not executed:
 {string.Join(Environment.NewLine, genericProjectActions.Select(x => "- " + x))}
 
 Use a concrete project name derived from the requested product or architecture documents.
-For the todo app, use TodoApp.Api, TodoApp.Application, TodoApp.Domain, TodoApp.Infrastructure, and TodoApp.Tests.
-Do not create source/App.Api, source/App.Services, source/App.Repositories, or source/App.Tests.
+For the todo app, use a single TodoApp.Api project with folders inside it.
+Do not create source/App.Api, source/App.Services, source/App.Repositories, source/App.Tests, TodoApp.Application, TodoApp.Domain, TodoApp.Infrastructure, or TodoApp.Tests projects.
 If a task file still contains generic App.* paths, update the task file first before implementing it.
 """;
         return true;
@@ -723,13 +727,47 @@ If a task file still contains generic App.* paths, update the task file first be
 
     private static bool ContainsGenericAppProjectPath(string value)
     {
-        return value.Contains("source/App.", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("source/src/App.", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("source/tests/App.", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("App.Api", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("App.Services", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("App.Repositories", StringComparison.OrdinalIgnoreCase)
-            || value.Contains("App.Tests", StringComparison.OrdinalIgnoreCase);
+        return ContainsGenericAppProjectToken(value.Replace('\\', '/'));
+    }
+
+    private static bool ContainsGenericAppProjectToken(string value)
+    {
+        var genericNames = new[]
+        {
+            "App.Api",
+            "App.Services",
+            "App.Repositories",
+            "App.Tests",
+            "TodoApp.Application",
+            "TodoApp.Domain",
+            "TodoApp.Infrastructure",
+            "TodoApp.Tests"
+        };
+
+        foreach (var genericName in genericNames)
+        {
+            for (var index = value.IndexOf(genericName, StringComparison.OrdinalIgnoreCase);
+                 index >= 0;
+                 index = value.IndexOf(genericName, index + genericName.Length, StringComparison.OrdinalIgnoreCase))
+            {
+                var before = index == 0 ? '\0' : value[index - 1];
+                var afterIndex = index + genericName.Length;
+                var after = afterIndex >= value.Length ? '\0' : value[afterIndex];
+
+                if (!IsProjectNameCharacter(before) && !IsProjectNameCharacter(after))
+                    return true;
+            }
+        }
+
+        return value.Contains("source/src/", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("source/tests/", StringComparison.OrdinalIgnoreCase)
+            || value.Contains(" src/", StringComparison.OrdinalIgnoreCase)
+            || value.Contains(" tests/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsProjectNameCharacter(char value)
+    {
+        return char.IsLetterOrDigit(value) || value == '_' || value == '.';
     }
 
     private AgentResponse ParseAgentResponse(string raw)

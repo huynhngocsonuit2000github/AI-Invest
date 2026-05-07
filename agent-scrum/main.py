@@ -257,11 +257,9 @@ def run_agent(user_prompt: str, max_steps: int = 10) -> str:
 
         # Only finish immediately when there are no actions left to run.
         # Some models incorrectly return done=true together with actions.
-        # In that case, we still execute the actions first.
-        if agent_response.get("done") and not actions:
-            return agent_response.get("final_answer", "Done.")
+        # In that case, we still execute the actions first. 
 
-        if agent_response.get("done"):
+        if agent_response.get("done") and not actions:
             return agent_response.get("final_answer", "Done.")
 
         tool_results = []

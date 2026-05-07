@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ScrumAgent.Console", "ScrumAgent.Console\ScrumAgent.Console.csproj", "{37FF4D17-8590-4504-86D3-0EFCD7750EEB}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{37FF4D17-8590-4504-86D3-0EFCD7750EEB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{37FF4D17-8590-4504-86D3-0EFCD7750EEB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{37FF4D17-8590-4504-86D3-0EFCD7750EEB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{37FF4D17-8590-4504-86D3-0EFCD7750EEB}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

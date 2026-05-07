@@ -1,1 +1,6 @@
 agent-scrum/.venv
+agent-scrum/**/obj/*
+agent-scrum/**/bin/*
+**/obj/*
+**/bin/*
+**/.vs/*

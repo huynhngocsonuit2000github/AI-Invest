@@ -4,6 +4,10 @@ namespace ScrumAgent.ConsoleApp;
 
 public sealed class AgentLoop
 {
+    private const int MaxToolOutputCharsForModel = 3000;
+    private const int MaxToolErrorCharsForModel = 1500;
+    private const int MaxInvalidResponsePreviewChars = 1200;
+
     private readonly OpenAiResponsesClient _llmClient;
     private readonly ToolRegistry _tools;
     private readonly WorkspaceLogger _logger;
@@ -24,11 +28,12 @@ public sealed class AgentLoop
 
     public async Task RunAsync(string userPrompt, CancellationToken cancellationToken)
     {
-        var messages = new List<ConversationItem>
+        var baseMessages = new List<ConversationItem>
         {
             new("developer", BuildDeveloperPrompt()),
             new("user", userPrompt)
         };
+        var messages = new List<ConversationItem>(baseMessages);
 
         var dateTime = DateTime.UtcNow;
         var executedToolCount = 0;
@@ -51,8 +56,7 @@ public sealed class AgentLoop
                 var error = $"Invalid model response: {ex.Message}";
                 System.Console.WriteLine(error);
                 await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/parse-errors.md", FormatParseError(iteration, raw, error), cancellationToken);
-                messages.Add(new("assistant", raw));
-                messages.Add(new("user", BuildInvalidResponsePrompt(userPrompt)));
+                messages = BuildNextMessages(baseMessages, BuildInvalidResponsePrompt(userPrompt, raw));
                 continue;
             }
 
@@ -63,6 +67,13 @@ public sealed class AgentLoop
                     .ToList()
             };
             System.Console.WriteLine(agentResponse.ThoughtSummary);
+
+            if (TryBuildForbiddenSourceActionError(userPrompt, agentResponse.Actions, out var forbiddenSourceError))
+            {
+                await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/blocked-actions.md", forbiddenSourceError, cancellationToken);
+                messages = BuildNextMessages(baseMessages, forbiddenSourceError);
+                continue;
+            }
 
             if (agentResponse.Actions.Count == 0)
             {
@@ -76,7 +87,7 @@ public sealed class AgentLoop
                     return;
                 }
 
-                messages.Add(new("user", completionError ?? BuildNoActionPrompt(userPrompt, executedToolCount)));
+                messages = BuildNextMessages(baseMessages, completionError ?? BuildNoActionPrompt(executedToolCount));
                 continue;
             }
 
@@ -93,7 +104,7 @@ public sealed class AgentLoop
                 await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/tool-results.md", FormatResult(result), cancellationToken);
             }
 
-            var resultJson = JsonSerializer.Serialize(results, _jsonOptions);
+            var resultJson = JsonSerializer.Serialize(CompactResultsForModel(results), _jsonOptions);
             string? completionErrorAfterActions = null;
 
             if (agentResponse.Done
@@ -108,11 +119,23 @@ public sealed class AgentLoop
                 return;
             }
 
-            messages.Add(new("assistant", raw));
-            messages.Add(new("user", completionErrorAfterActions ?? BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count)));
+            messages = BuildNextMessages(
+                baseMessages,
+                completionErrorAfterActions ?? BuildContinuationPrompt(resultJson, actionsToRun.Count, agentResponse.Actions.Count));
         }
 
         System.Console.WriteLine("Stopped after max iterations.");
+    }
+
+    private static List<ConversationItem> BuildNextMessages(
+        IReadOnlyList<ConversationItem> baseMessages,
+        string continuationPrompt)
+    {
+        var messages = new List<ConversationItem>(baseMessages)
+        {
+            new("user", continuationPrompt)
+        };
+        return messages;
     }
 
     private string BuildDeveloperPrompt()
@@ -122,7 +145,7 @@ You are a local AI Scrum Team Agent.
 Your role is Developer Agent + basic Scrum executor.
 
 You are not a chatbot.
-You must execute by returning tool actions.
+You must execute work by returning JSON tool actions.
 Do not explain steps to the user unless the task is finished.
 
 Workspace root:
@@ -165,17 +188,18 @@ When the user asks to create planning files, initialize project planning automat
 Do not ask the user for detailed file content.
 Generate meaningful content yourself based on the user's project description.
 
-For project planning tasks:
-- Create multiple task-specific planning files under docs/ and scrum/backlog.
+For planning-only requests:
+- Do not create application source code.
+- Do not create source directories or files.
+- Do not run dotnet commands.
+- Create useful docs, backlog tasks, and memory files.
 - Do not create only one generic planning document.
 - Do not create empty markdown files.
 - Do not create empty memory files unless the user explicitly asks for empty files.
-- Use descriptive filenames.
-- Never use literal placeholder filenames such as example.md, task-specific-file-name.md, placeholder.md, or file.md.
-- For planning-only requests, do not create application source code.
+- Use descriptive kebab-case filenames.
+- Never use placeholder filenames such as example.md, task-specific-file-name.md, placeholder.md, or file.md.
 
 For a new software project planning request, create this structure when useful:
-- source
 - scrum/backlog
 - scrum/sprint
 - scrum/done
@@ -189,47 +213,64 @@ For a new software project planning request, create this structure when useful:
 - logs/tests
 - logs/reviews
 
-For a new project planning request, create these files when useful:
+Create planning documents in these categories when relevant:
+- product requirements under docs/product/
+- architecture or design under docs/architecture/
+- API, contract, or interface plan under docs/api/
+- technical decisions under docs/decisions/
+- backlog task files under scrum/backlog/
+- project memory under memory/
+
+Recommended planning document pattern:
 - docs/product/{project-name}-product-spec.md
 - docs/architecture/{project-name}-architecture.md
 - docs/api/{project-name}-api-plan.md
-- scrum/backlog/TASK-0001-project-setup.md
-- scrum/backlog/TASK-0002-user-module.md
-- scrum/backlog/TASK-0003-group-module.md
-- scrum/backlog/TASK-0004-role-module.md
-- scrum/backlog/TASK-0005-todo-module.md
-- scrum/backlog/TASK-0006-auth-rbac.md
-- scrum/backlog/TASK-0007-tests.md
-- memory/project_map.json
-- memory/business_rules.md
-- memory/feature_history.md
-- memory/test_knowledge.md
-- memory/coding_conventions.md
-- memory/known_issues.md
-- memory/agent_notes.md
 
-When creating TASK-0001 for a software project, it must be source project setup, not only folder setup.
+If the project has no API or external interface, skip API-specific documents.
+If the project has no authentication requirement, do not create auth-specific tasks.
+If the user provides a tech stack, follow it.
+If not, infer a reasonable stack from the project type.
+
+BACKLOG TASK RULES:
+- Create 5 to 10 backlog task files depending on project complexity.
+- Use sequential task ids: TASK-0001, TASK-0002, TASK-0003.
+- TASK-0001 must set up the actual source project, not only folders.
+- Later tasks must map to the user's requested features, modules, or domain behavior.
+- Do not hardcode todo, user, group, role, or auth tasks unless the user requested them.
+- Every newly created backlog task must use Status: Ready.
+- Do not mark newly created backlog tasks as Done.
+
+Recommended backlog task pattern:
+- scrum/backlog/TASK-0001-project-setup.md
+- scrum/backlog/TASK-0002-{domain-module-or-feature}.md
+- scrum/backlog/TASK-0003-{domain-module-or-feature}.md
+- scrum/backlog/TASK-0004-{domain-module-or-feature}.md
+- scrum/backlog/TASK-0005-tests.md
 
 TASK-0001 must include:
 - create actual source project
-- create csproj
-- create Program.cs
-- create appsettings.json
+- create project file or package manifest
+- create application entry point
+- create configuration file when relevant
 - create base architecture folders
-- create initial health endpoint
+- create initial health or smoke-test endpoint when relevant
+- configure basic framework services
 - run build
 
-Do not mark newly created backlog tasks as Done.
-New backlog tasks must use Status: Ready.
-
-If the project is not a todo app, adapt task names to the user's domain.
-For example, for an ecommerce app, use product, cart, order, payment, and customer tasks.
-For a CRM app, use customer, contact, lead, activity, and reporting tasks.
+Infer task names from the user's requested domain and features.
+Examples:
+- ecommerce: product, cart, order, payment, customer
+- CRM: customer, contact, lead, activity, reporting
+- todo or task management: user, group, role, todo, auth
+- blog or CMS: post, category, media, comment, author
+- booking system: resource, availability, reservation, payment, notification
+Do not use these examples unless they match the user's request.
 
 TASK EXECUTION RULES:
 When the user asks to implement a task by task id, such as "Implement TASK-0001":
 - Search scrum/backlog, scrum/sprint, and scrum/done for the matching task file.
 - Read the matching task file first.
+- If the task file status is Done, do not re-implement it unless the user explicitly asks to redo it.
 - Read relevant docs under docs/.
 - Read relevant memory files under memory/.
 - Infer the required implementation from the task file, architecture docs, and memory.
@@ -239,6 +280,16 @@ When the user asks to implement a task by task id, such as "Implement TASK-0001"
 - After implementation, run build/test if possible.
 - Update memory/project_map.json and memory/feature_history.md after successful build.
 - If the task cannot be implemented because information is missing, create a clear note in logs and finalAnswer.
+
+NEXT TASK RULES:
+When the user says "implement next task" or "pick the first backlog task":
+- List files in scrum/backlog.
+- Select the lowest TASK number with Status: Ready or Status: Todo.
+- Read that task file.
+- Read relevant docs and memory.
+- Implement only that task.
+- After successful build/test, update the task status to Done or move/copy the task file to scrum/done if supported by available tools.
+- Do not skip tasks unless the task is already Done.
 
 CONTENT QUALITY RULES:
 Each markdown planning file must contain useful generated content.
@@ -253,21 +304,21 @@ Product spec should include:
 - Acceptance criteria
 - Out of scope
 
-Architecture document should include:
+Architecture or design document should include:
 - Tech stack
 - Application layers
 - Folder structure
-- Database plan
-- Authentication and authorization plan
+- Database or storage plan when relevant
+- Authentication and authorization plan when relevant
 - Dependency flow
 - Build/test strategy
 
-API plan should include:
-- Planned endpoints
-- Request/response conventions
+API or interface plan should include:
+- Planned endpoints or interfaces
+- Request/response conventions when relevant
 - Validation rules
 - Error response conventions
-- Authentication requirements
+- Authentication requirements when relevant
 
 Each backlog task file must include:
 - Goal
@@ -276,6 +327,16 @@ Each backlog task file must include:
 - Acceptance Criteria
 - Dependencies
 - Status
+
+MEMORY FILE RULES:
+Create or update these memory files when useful:
+- memory/project_map.json
+- memory/business_rules.md
+- memory/feature_history.md
+- memory/test_knowledge.md
+- memory/coding_conventions.md
+- memory/known_issues.md
+- memory/agent_notes.md
 
 Memory files must contain useful initial project knowledge:
 - project_map.json must be valid JSON
@@ -287,14 +348,22 @@ Memory files must contain useful initial project knowledge:
 - agent_notes.md must describe what was initialized and the next recommended task
 
 DEFAULT TECHNICAL ASSUMPTIONS:
-If the user does not specify a stack, prefer:
+If the user does not specify a stack, infer from the project type.
+For backend API projects, prefer:
 - .NET 8 Web API
 - PostgreSQL with EF Core
-- JWT authentication
+- JWT authentication only if authentication is required or requested
 - controller-service-repository architecture
 - DTOs for API requests/responses
 - async methods
 - xUnit tests
+
+For frontend web apps, prefer:
+- React or Next.js
+- TypeScript
+- component-based structure
+- API client layer
+- basic tests
 
 If the user specifies a stack, follow the user's stack instead.
 
@@ -303,12 +372,13 @@ When the user asks to create or update source code:
 - Read relevant planning files and memory first when they exist.
 - Implement only the requested task or scope.
 - Create/update source files under source/.
-- Keep controllers thin.
-- Put business logic in services.
-- Put data access in repositories.
-- Use DTOs for API contracts.
+- Follow the architecture and coding conventions from docs and memory.
+- Keep controllers or handlers thin when applicable.
+- Put business logic in services when applicable.
+- Put data access in repositories when applicable.
+- Use DTOs or request/response models for API contracts when applicable.
 - Use async methods when appropriate.
-- Run build/test if possible.
+- Run build/test after source changes if possible.
 - Update memory only after successful build/test when possible.
 
 JSON RESPONSE SHAPE:
@@ -316,10 +386,10 @@ JSON RESPONSE SHAPE:
   "thoughtSummary": "short summary, no private chain of thought",
   "actions": [
     {
-      "tool": "tool_name",
+      "tool": "write_file",
       "args": {
-        "path": "example",
-        "content": "example"
+        "path": "example.md",
+        "content": "example content"
       }
     }
   ],
@@ -339,8 +409,25 @@ EXAMPLE WRITE FILE ACTION:
 {
   "tool": "write_file",
   "args": {
-    "path": "docs/product/todo-app-product-spec.md",
-    "content": "# TodoApp Product Spec\n\n## Overview\nTodoApp is a .NET 8 Web API for managing users, groups, roles, and todos.\n"
+    "path": "docs/product/sample-product-spec.md",
+    "content": "# Product Spec\n\n## Overview\nDescribe the product goal and main users.\n"
+  }
+}
+
+EXAMPLE READ FILE ACTION:
+{
+  "tool": "read_file",
+  "args": {
+    "path": "scrum/backlog/TASK-0001-project-setup.md"
+  }
+}
+
+EXAMPLE RUN COMMAND ACTION:
+{
+  "tool": "run_command",
+  "args": {
+    "command": "dotnet build source/App.Api/App.Api.csproj",
+    "workingDirectory": "."
   }
 }
 
@@ -354,16 +441,22 @@ WHEN FINISHED:
 """;
     }
 
-    private static string BuildInvalidResponsePrompt(string userPrompt)
+    private static string BuildInvalidResponsePrompt(string userPrompt, string rawResponse)
     {
+        var actionGuidance = IsSourceCreationForbidden(userPrompt)
+            ? "Use write_file/create_directory actions only under docs/, scrum/, memory/, or logs/. Do not use source/ paths or dotnet commands."
+            : "Use tool actions to continue the original request.";
+        var responsePreview = TruncateForModel(rawResponse.ReplaceLineEndings(" ").Trim(), MaxInvalidResponsePreviewChars);
+
         return $$"""
 Your previous response was not valid JSON for the required schema.
 Return exactly one JSON object and no other text.
 The first character must be { and the last character must be }.
-You must continue the original user request by using tool actions.
+{{actionGuidance}}
 
-Original user request:
-{{userPrompt}}
+Invalid response preview:
+{{responsePreview}}
+
 
 Use this shape:
 {
@@ -383,22 +476,22 @@ Use this shape:
 """;
     }
 
-    private static string BuildNoActionPrompt(string userPrompt, int executedToolCount)
+    private static string BuildNoActionPrompt(int executedToolCount)
     {
         return $$"""
 No executable tool actions were provided. Tool executions so far: {{executedToolCount}}.
 Do not set done=true until tool results prove the task is complete.
 Continue the original user request by returning write_file/create_directory actions.
 Use descriptive task-specific filenames. Never use literal placeholder filenames such as example.md, task-specific-file-name.md, or placeholder.md.
-
-Original user request:
-{{userPrompt}}
 """;
     }
 
     private static bool CanFinish(string userPrompt, bool wroteSourceFile, bool buildSucceeded, out string? error)
     {
         error = null;
+
+        if (IsSourceCreationForbidden(userPrompt))
+            return true;
 
         if (!IsImplementationPrompt(userPrompt))
             return true;
@@ -426,10 +519,11 @@ Return a run_command action for the build, using the correct project workingDire
 
     private static bool IsImplementationPrompt(string prompt)
     {
-        return prompt.Contains("implement", StringComparison.OrdinalIgnoreCase)
+        return !IsSourceCreationForbidden(prompt)
+            && (prompt.Contains("implement", StringComparison.OrdinalIgnoreCase)
             || prompt.Contains("create a .net", StringComparison.OrdinalIgnoreCase)
             || prompt.Contains("create source code", StringComparison.OrdinalIgnoreCase)
-            || prompt.Contains("under source/", StringComparison.OrdinalIgnoreCase);
+            || prompt.Contains("under source/", StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool RequiresBuild(string prompt)
@@ -451,6 +545,89 @@ Return a run_command action for the build, using the correct project workingDire
             && action.Tool.Equals("run_command", StringComparison.OrdinalIgnoreCase)
             && action.Args.TryGetValue("command", out var command)
             && command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryBuildForbiddenSourceActionError(
+        string userPrompt,
+        IReadOnlyList<AgentAction> actions,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (!IsSourceCreationForbidden(userPrompt))
+            return false;
+
+        var forbiddenActions = actions
+            .Where(IsSourceCreationAction)
+            .Select(DescribeAction)
+            .ToArray();
+
+        if (forbiddenActions.Length == 0)
+            return false;
+
+        error = $"""
+The user explicitly requested planning only and said not to create source code yet.
+These proposed actions are blocked and were not executed:
+{string.Join(Environment.NewLine, forbiddenActions.Select(x => "- " + x))}
+
+Return only planning actions under docs/, scrum/, memory/, or logs/.
+Do not write files under source/.
+Do not create source directories.
+Do not run dotnet new, dotnet build, dotnet add, dotnet restore, or other implementation commands.
+""";
+        return true;
+    }
+
+    private static bool IsSourceCreationForbidden(string prompt)
+    {
+        return prompt.Contains("do not create source code", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("do not create application source code", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("do not create code", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("no any code", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("just planning", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSourceCreationAction(AgentAction action)
+    {
+        var tool = action.Tool;
+        var path = action.Args.TryGetValue("path", out var actionPath)
+            ? actionPath.Replace('\\', '/')
+            : string.Empty;
+        var workingDirectory = action.Args.TryGetValue("workingDirectory", out var wd)
+            ? wd.Replace('\\', '/')
+            : string.Empty;
+        var command = action.Args.TryGetValue("command", out var cmd)
+            ? cmd
+            : string.Empty;
+
+        if ((tool.Equals("write_file", StringComparison.OrdinalIgnoreCase)
+                || tool.Equals("create_directory", StringComparison.OrdinalIgnoreCase)
+                || tool.Equals("touch_file", StringComparison.OrdinalIgnoreCase)
+                || tool.Equals("replace_in_file", StringComparison.OrdinalIgnoreCase))
+            && path.StartsWith("source/", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!tool.Equals("run_command", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        return workingDirectory.StartsWith("source/", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("dotnet new", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("dotnet build", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("dotnet add", StringComparison.OrdinalIgnoreCase)
+            || command.Contains("dotnet restore", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string DescribeAction(AgentAction action)
+    {
+        if (action.Args.TryGetValue("path", out var path))
+            return $"{action.Tool} {path}";
+
+        if (action.Args.TryGetValue("command", out var command))
+            return $"{action.Tool} {command}";
+
+        return action.Tool;
     }
 
     private AgentResponse ParseAgentResponse(string raw)
@@ -775,6 +952,27 @@ Return a run_command action for the build, using the correct project workingDire
             : normalized[..240] + "...";
     }
 
+    private static IReadOnlyList<ModelToolResult> CompactResultsForModel(IEnumerable<ToolResult> results)
+    {
+        return results
+            .Select(result => new ModelToolResult(
+                result.Tool,
+                result.Success,
+                TruncateForModel(result.Output, MaxToolOutputCharsForModel),
+                string.IsNullOrWhiteSpace(result.Error)
+                    ? null
+                    : TruncateForModel(result.Error, MaxToolErrorCharsForModel)))
+            .ToArray();
+    }
+
+    private static string TruncateForModel(string? value, int maxChars)
+    {
+        if (string.IsNullOrEmpty(value) || value.Length <= maxChars)
+            return value ?? string.Empty;
+
+        return value[..maxChars] + $"\n...[truncated {value.Length - maxChars} chars; full output is in logs]";
+    }
+
     private static string FormatResult(ToolResult result)
     {
         return $"""
@@ -848,4 +1046,10 @@ Raw response:
 
 """;
     }
+
+    private sealed record ModelToolResult(
+        string Tool,
+        bool Success,
+        string Output,
+        string? Error);
 }

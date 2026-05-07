@@ -323,10 +323,22 @@ API or interface plan should include:
 Each backlog task file must include:
 - Goal
 - Scope
+- Technical Context
+- Expected Files or Areas
 - Technical Tasks
 - Acceptance Criteria
+- Test Plan
 - Dependencies
+- Non-Goals
 - Status
+
+Backlog task files must be detailed enough for a developer agent to implement without asking for clarification:
+- Include concrete class, interface, folder, endpoint, DTO, database table, migration, configuration, and test-file suggestions when relevant.
+- Describe expected behavior, validation rules, authorization rules, data relationships, and error cases.
+- Technical Tasks must be specific implementation steps, not generic lines such as "create service" or "create repository".
+- Acceptance Criteria must be observable and testable.
+- Test Plan must name the unit, integration, or API tests expected for the task.
+- For planning-only requests, describe source files and commands as future work inside task text only; do not create source files or run commands.
 
 MEMORY FILE RULES:
 Create or update these memory files when useful:

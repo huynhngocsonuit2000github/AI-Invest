@@ -1,1 +1,1 @@
-Create planning files for a .NET 8 todo app with users, groups, roles, todos, JWT, PostgreSQL, and xUnit. Do not create source code yet. just planning what will do.
+Create planning files for a .NET 8 todo app with users, groups, roles, todos, JWT, PostgreSQL, and xUnit. Do not create source code yet. just planning what will do. Make backlog task files detailed and technical enough that a developer can implement each task without asking for clarification.

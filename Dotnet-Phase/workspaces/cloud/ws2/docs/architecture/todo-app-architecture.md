@@ -1,24 +1,24 @@
 # TodoApp Architecture
 
-## Tech Stack
+## Tech stack
 * .NET 8 Web API
 * PostgreSQL with EF Core
 * JWT authentication
-## Application Layers
-* Controller
-* Service
-* Repository
-## Folder Structure
+## Application layers
+* Controller layer
+* Service layer
+* Repository layer
+## Folder structure
 * source
 * scrum
 * docs
 * memory
 * logs
-## Database Plan
-* PostgreSQL database with EF Core
-## Authentication and Authorization Plan
+## Database plan
+* Users table
+* Groups table
+* Roles table
+* Todos table
+## Authentication and authorization plan
 * JWT authentication
-## Dependency Flow
-* Controller -> Service -> Repository
-## Build/Test Strategy
-* xUnit tests
+* Role-based authorization

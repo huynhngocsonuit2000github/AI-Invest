@@ -1,6 +1,1 @@
-{
-  "projectName": "AI Scrum Project",
-  "sourceRoot": "source",
-  "scrumRoot": "scrum",
-  "docsRoot": "docs"
-}
+{"projects": [{"name": "TodoApp", "description": "A .NET 8 Web API for managing users, groups, roles, and todos"}]}

@@ -1,3 +1,3 @@
 # Coding Conventions
 
-* Follow .NET coding conventions
+* Follow .NET 8 coding standards

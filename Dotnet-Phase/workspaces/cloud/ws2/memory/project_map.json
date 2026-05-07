@@ -1,1 +1,1 @@
-{"modules": ["users", "groups", "roles", "todos"], "dependencies": ["TASK-0001"]}
+{"projects": [{"name": "TodoApp", "description": "A .NET 8 Web API for managing users, groups, roles, and todos", "status": "in_progress"}]}

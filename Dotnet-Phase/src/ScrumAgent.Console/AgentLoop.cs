@@ -208,9 +208,37 @@ For a new project planning request, create these files when useful:
 - memory/known_issues.md
 - memory/agent_notes.md
 
+When creating TASK-0001 for a software project, it must be source project setup, not only folder setup.
+
+TASK-0001 must include:
+- create actual source project
+- create csproj
+- create Program.cs
+- create appsettings.json
+- create base architecture folders
+- create initial health endpoint
+- run build
+
+Do not mark newly created backlog tasks as Done.
+New backlog tasks must use Status: Ready.
+
 If the project is not a todo app, adapt task names to the user's domain.
 For example, for an ecommerce app, use product, cart, order, payment, and customer tasks.
 For a CRM app, use customer, contact, lead, activity, and reporting tasks.
+
+TASK EXECUTION RULES:
+When the user asks to implement a task by task id, such as "Implement TASK-0001":
+- Search scrum/backlog, scrum/sprint, and scrum/done for the matching task file.
+- Read the matching task file first.
+- Read relevant docs under docs/.
+- Read relevant memory files under memory/.
+- Infer the required implementation from the task file, architecture docs, and memory.
+- Do not ask the user to repeat task details if the task file exists.
+- Implement only that task.
+- Do not implement future tasks.
+- After implementation, run build/test if possible.
+- Update memory/project_map.json and memory/feature_history.md after successful build.
+- If the task cannot be implemented because information is missing, create a clear note in logs and finalAnswer.
 
 CONTENT QUALITY RULES:
 Each markdown planning file must contain useful generated content.

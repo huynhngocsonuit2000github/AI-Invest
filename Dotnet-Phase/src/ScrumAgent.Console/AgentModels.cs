@@ -1,18 +1,22 @@
-using System.Text.Json.Serialization;
-
 namespace ScrumAgent.ConsoleApp;
 
-public sealed record AgentAction(
-    [property: JsonPropertyName("tool")] string Tool,
-    [property: JsonPropertyName("args")] Dictionary<string, string> Args
-);
+public sealed record AgentResponse
+{
+    public string? ThoughtSummary { get; init; }
 
-public sealed record AgentResponse(
-    [property: JsonPropertyName("thoughtSummary")] string ThoughtSummary,
-    [property: JsonPropertyName("actions")] List<AgentAction> Actions,
-    [property: JsonPropertyName("done")] bool Done,
-    [property: JsonPropertyName("finalAnswer")] string? FinalAnswer
-);
+    public List<AgentAction> Actions { get; init; } = [];
+
+    public bool Done { get; init; }
+
+    public string? FinalAnswer { get; init; }
+}
+
+public sealed record AgentAction
+{
+    public string Tool { get; init; } = string.Empty;
+
+    public Dictionary<string, string> Args { get; init; } = [];
+}
 
 public sealed record ToolResult(
     string Tool,

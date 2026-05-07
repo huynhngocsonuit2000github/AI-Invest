@@ -14,13 +14,17 @@ public sealed class OpenAiResponsesClient
         WriteIndented = false
     };
 
-    public OpenAiResponsesClient(HttpClient httpClient, string apiKey, string baseUrl, string model)
+    public OpenAiResponsesClient(HttpClient httpClient, string provider, string? apiKey, string baseUrl, string model)
     {
         _httpClient = httpClient;
         _httpClient.BaseAddress = new Uri(NormalizeBaseUrl(baseUrl));
         _httpClient.Timeout = TimeSpan.FromMinutes(6);
-        _model = NormalizeModel(model, _httpClient.BaseAddress);
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        _model = NormalizeModel(model, provider, _httpClient.BaseAddress);
+
+        if (!string.IsNullOrWhiteSpace(apiKey))
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        }
     }
 
     public async Task<string> CompleteAsync(IReadOnlyList<ConversationItem> messages, CancellationToken cancellationToken)
@@ -34,6 +38,8 @@ public sealed class OpenAiResponsesClient
         var payload = new
         {
             model = _model,
+            format = "json",    // Ollama
+            stream = false,    // Ollama
             messages = chatMessages,
             temperature = 0.2
         };
@@ -62,14 +68,20 @@ public sealed class OpenAiResponsesClient
             : baseUrl + "/";
     }
 
-    private static string NormalizeModel(string model, Uri baseAddress)
+    private static string NormalizeModel(string model, string provider, Uri baseAddress)
     {
         const string openRouterProviderPrefix = "openrouter/";
+        const string ollamaProviderPrefix = "ollama/";
 
-        if (baseAddress.Host.Contains("openrouter.ai", StringComparison.OrdinalIgnoreCase)
+        if ((provider == "openrouter" || baseAddress.Host.Contains("openrouter.ai", StringComparison.OrdinalIgnoreCase))
             && model.StartsWith(openRouterProviderPrefix, StringComparison.OrdinalIgnoreCase))
         {
             return model[openRouterProviderPrefix.Length..];
+        }
+
+        if (provider == "ollama" && model.StartsWith(ollamaProviderPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return model[ollamaProviderPrefix.Length..];
         }
 
         return model;

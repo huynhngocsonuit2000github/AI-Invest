@@ -1,7 +1,0 @@
-bin/
-obj/
-.env
-src/ScrumAgent.Console/appsettings.json
-workspace/source/**/bin/
-workspace/source/**/obj/
-workspace/logs/**/*.log

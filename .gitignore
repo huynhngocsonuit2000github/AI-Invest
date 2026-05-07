@@ -4,3 +4,4 @@ agent-scrum/**/bin/*
 **/obj/*
 **/bin/*
 **/.vs/*
+Dotnet-Phase/workspace3/logs/task_runs/*

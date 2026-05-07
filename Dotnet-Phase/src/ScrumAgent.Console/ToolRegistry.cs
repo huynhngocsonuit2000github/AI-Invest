@@ -14,20 +14,25 @@ public sealed class ToolRegistry
         return string.Join(Environment.NewLine, _tools.Values.Select(t => $"- {t.Name}: {t.Description}"));
     }
 
-    public async Task<ToolResult> ExecuteAsync(AgentAction action, CancellationToken cancellationToken)
+    public async Task<ToolResult> ExecuteAsync(
+    AgentAction action,
+    CancellationToken cancellationToken)
     {
-        if (!_tools.TryGetValue(action.Tool, out var tool))
+        if (action is null)
         {
-            return new ToolResult(action.Tool, false, string.Empty, $"Unknown tool: {action.Tool}");
+            return new ToolResult("emptytool", false, "Invalid action: action is null.");
         }
 
-        try
+        if (string.IsNullOrWhiteSpace(action.Tool))
         {
-            return await tool.ExecuteAsync(action.Args, cancellationToken);
+            return new ToolResult("emptytool", false, "Invalid action: tool is missing or empty.");
         }
-        catch (Exception ex)
+
+        if (!_tools.TryGetValue(action.Tool, out var tool))
         {
-            return new ToolResult(action.Tool, false, string.Empty, ex.Message);
+            return new ToolResult("emptytool", false, $"Unknown tool: {action.Tool}");
         }
+
+        return await tool.ExecuteAsync(action.Args!, cancellationToken);
     }
 }

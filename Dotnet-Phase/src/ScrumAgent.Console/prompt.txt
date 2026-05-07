@@ -1,39 +1,21 @@
-Read the existing planning files in docs, scrum/backlog, and memory. Implement TASK-0001 project setup only.
+Create project planning files for a .NET 8 todo app with users, groups, roles, and RBAC. Do not create source code yet.
 
-Create a .NET 8 Web API project under source/TodoApp.Api.
+Use only JSON tool actions.
 
-Requirements:
-- Use controller-based ASP.NET Core Web API
-- Add EF Core packages for PostgreSQL
-- Add basic folder structure:
-  - Controllers
-  - Services
-  - Repositories
-  - Models
-  - DTOs
-  - Data
-- Add AppDbContext
-- Add initial Program.cs configuration
-- Do not implement user, group, role, or todo CRUD yet
-- Run dotnet build after changes
+Create these files:
 
-You must return JSON tool actions only. Do not explain manual steps.
+- docs/product/todo-app-product-spec.md
+- docs/architecture/todo-app-architecture.md
+- docs/api/todo-app-api-plan.md
+- scrum/backlog/TASK-0001-project-setup.md
+- scrum/backlog/TASK-0002-user-module.md
+- scrum/backlog/TASK-0003-group-module.md
+- scrum/backlog/TASK-0004-role-module.md
+- scrum/backlog/TASK-0005-todo-module.md
+- scrum/backlog/TASK-0006-auth-rbac.md
+- scrum/backlog/TASK-0007-tests.md
+- memory/business_rules.md
+- memory/coding_conventions.md
+- memory/test_knowledge.md
 
-Minimum required actions:
-- read_file docs/product/todo-app-product-spec.md
-- read_file docs/architecture/todo-app-architecture.md
-- read_file docs/api/todo-app-api-plan.md
-- read_file scrum/backlog/TASK-0001-project-setup.md
-- create_directory source/TodoApp.Api
-- write_file source/TodoApp.Api/TodoApp.Api.csproj
-- write_file source/TodoApp.Api/Program.cs
-- write_file source/TodoApp.Api/appsettings.json
-- write_file source/TodoApp.Api/Data/AppDbContext.cs
-- create_directory source/TodoApp.Api/Controllers
-- create_directory source/TodoApp.Api/Services
-- create_directory source/TodoApp.Api/Repositories
-- create_directory source/TodoApp.Api/Models
-- create_directory source/TodoApp.Api/DTOs
-- run_command with command "dotnet build" and workingDirectory "source/TodoApp.Api"
-
-Set done=true only after the build tool result succeeds.
+Use .NET 8 Web API, EF Core, PostgreSQL, JWT, controller-service-repository structure, DTOs, async methods, and xUnit tests.

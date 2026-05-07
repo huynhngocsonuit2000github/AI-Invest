@@ -75,6 +75,13 @@ public sealed class AgentLoop
                 continue;
             }
 
+            if (TryBuildGenericProjectNameActionError(agentResponse.Actions, out var genericProjectNameError))
+            {
+                await _logger.AppendAsync($"task_runs/{dateTime:yyyyMMddHHmmss}/blocked-actions.md", genericProjectNameError, cancellationToken);
+                messages = BuildNextMessages(baseMessages, genericProjectNameError);
+                continue;
+            }
+
             if (agentResponse.Actions.Count == 0)
             {
                 string? completionError = null;
@@ -231,6 +238,27 @@ If the project has no authentication requirement, do not create auth-specific ta
 If the user provides a tech stack, follow it.
 If not, infer a reasonable stack from the project type.
 
+PROJECT NAMING RULES:
+- Derive a stable PascalCase project name from the user's product name or domain.
+- For a todo app, use TodoApp.
+- Never use generic names such as App, MyApp, Sample, Demo, Project, or Application as the project name unless the user explicitly names the product that way.
+- .NET project, namespace, folder, and solution names must use the derived project name consistently.
+
+.NET BACKEND STRUCTURE RULES:
+- For .NET backend/API projects, prefer this structure:
+  - source/{ProjectName}.sln
+  - source/src/{ProjectName}.Api
+  - source/src/{ProjectName}.Application
+  - source/src/{ProjectName}.Domain
+  - source/src/{ProjectName}.Infrastructure
+  - source/tests/{ProjectName}.Tests
+- Do not create generic source/App.Api, source/App.Services, source/App.Repositories, or source/App.Tests paths.
+- Do not use separate Services and Repositories projects unless an existing architecture document explicitly requires that split.
+- Put service interfaces and application DTOs in the Application project.
+- Put entities and domain enums in the Domain project.
+- Put EF Core DbContext, migrations, and repository implementations in the Infrastructure project.
+- Put API controllers and startup/configuration in the Api project.
+
 BACKLOG TASK RULES:
 - Create 5 to 10 backlog task files depending on project complexity.
 - Use sequential task ids: TASK-0001, TASK-0002, TASK-0003.
@@ -256,6 +284,9 @@ TASK-0001 must include:
 - create initial health or smoke-test endpoint when relevant
 - configure basic framework services
 - run build
+- use the explicit requested framework, for example `--framework net8.0` for .NET 8
+- create only setup/skeleton code, not business modules
+- do not create the initial database schema, EF migrations, or run `dotnet ef database update`; those belong to persistence or feature implementation tasks after entities exist
 
 Infer task names from the user's requested domain and features.
 Examples:
@@ -339,6 +370,8 @@ Backlog task files must be detailed enough for a developer agent to implement wi
 - Acceptance Criteria must be observable and testable.
 - Test Plan must name the unit, integration, or API tests expected for the task.
 - For planning-only requests, describe source files and commands as future work inside task text only; do not create source files or run commands.
+- Expected Files or Areas must list concrete file paths, not vague entries such as "database schema".
+- If a task needs database work, name the future entity, DbContext, configuration, migration, and repository files explicitly.
 
 MEMORY FILE RULES:
 Create or update these memory files when useful:
@@ -385,6 +418,9 @@ When the user asks to create or update source code:
 - Implement only the requested task or scope.
 - Create/update source files under source/.
 - Follow the architecture and coding conventions from docs and memory.
+- If the task file uses generic App.* paths, vague "database schema" entries, or conflicts with the architecture docs, update the task/planning files to the concrete project structure first, then implement the corrected task.
+- For .NET 8 projects, pass `--framework net8.0` to `dotnet new` commands and use package versions compatible with .NET 8.
+- Do not run EF migrations or database updates until the task explicitly defines entities and DbContext files needed for that migration.
 - Keep controllers or handlers thin when applicable.
 - Put business logic in services when applicable.
 - Put data access in repositories when applicable.
@@ -438,7 +474,7 @@ EXAMPLE RUN COMMAND ACTION:
 {
   "tool": "run_command",
   "args": {
-    "command": "dotnet build source/App.Api/App.Api.csproj",
+    "command": "dotnet build source/TodoApp.sln",
     "workingDirectory": "."
   }
 }
@@ -640,6 +676,60 @@ Do not run dotnet new, dotnet build, dotnet add, dotnet restore, or other implem
             return $"{action.Tool} {command}";
 
         return action.Tool;
+    }
+
+    private static bool TryBuildGenericProjectNameActionError(
+        IReadOnlyList<AgentAction> actions,
+        out string error)
+    {
+        error = string.Empty;
+
+        var genericProjectActions = actions
+            .Where(IsGenericProjectNameAction)
+            .Select(DescribeAction)
+            .ToArray();
+
+        if (genericProjectActions.Length == 0)
+            return false;
+
+        error = $"""
+These proposed actions use generic App.* project names and were not executed:
+{string.Join(Environment.NewLine, genericProjectActions.Select(x => "- " + x))}
+
+Use a concrete project name derived from the requested product or architecture documents.
+For the todo app, use TodoApp.Api, TodoApp.Application, TodoApp.Domain, TodoApp.Infrastructure, and TodoApp.Tests.
+Do not create source/App.Api, source/App.Services, source/App.Repositories, or source/App.Tests.
+If a task file still contains generic App.* paths, update the task file first before implementing it.
+""";
+        return true;
+    }
+
+    private static bool IsGenericProjectNameAction(AgentAction action)
+    {
+        var path = action.Args.TryGetValue("path", out var actionPath)
+            ? actionPath.Replace('\\', '/')
+            : string.Empty;
+        var workingDirectory = action.Args.TryGetValue("workingDirectory", out var wd)
+            ? wd.Replace('\\', '/')
+            : string.Empty;
+        var command = action.Args.TryGetValue("command", out var cmd)
+            ? cmd.Replace('\\', '/')
+            : string.Empty;
+
+        return ContainsGenericAppProjectPath(path)
+            || ContainsGenericAppProjectPath(workingDirectory)
+            || ContainsGenericAppProjectPath(command);
+    }
+
+    private static bool ContainsGenericAppProjectPath(string value)
+    {
+        return value.Contains("source/App.", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("source/src/App.", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("source/tests/App.", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("App.Api", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("App.Services", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("App.Repositories", StringComparison.OrdinalIgnoreCase)
+            || value.Contains("App.Tests", StringComparison.OrdinalIgnoreCase);
     }
 
     private AgentResponse ParseAgentResponse(string raw)

@@ -1,1 +1,0 @@
-Created project planning files for todo app: project_plan.md, requirements.txt, and use_cases.md

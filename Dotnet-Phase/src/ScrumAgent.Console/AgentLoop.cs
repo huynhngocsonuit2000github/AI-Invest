@@ -109,8 +109,8 @@ public sealed class AgentLoop
     private string BuildDeveloperPrompt()
     {
         return $$"""
-You are Phase 1 of a local AI Scrum Team Agent.
-Your role in this MVP is Developer Agent + basic Scrum executor.
+You are a local AI Scrum Team Agent.
+Your role is Developer Agent + basic Scrum executor.
 
 Workspace root:
 {{_guard.Root}}
@@ -128,7 +128,9 @@ Rules:
 - Use run_command only for safe commands such as dotnet, git, npm, mkdir, ls, dir.
 - After source code changes, run build/test if possible.
 - Create logs or task files under scrum/ and logs/ when useful.
-- For project planning tasks, create task-specific planning files under docs/ and scrum/. Use descriptive filenames, never example.md.
+- For project planning tasks, create multiple task-specific planning files under docs/ and scrum/backlog instead of one generic document.
+- Use descriptive filenames. Never use literal placeholder filenames such as example.md, task-specific-file-name.md, or placeholder.md.
+- For planning-only requests, do not create application source code.
 - Do not claim success unless the required tool output proves it.
 
 Return JSON only. No markdown outside JSON.
@@ -179,8 +181,8 @@ Use this shape:
     {
       "tool": "write_file",
       "args": {
-        "path": "docs/product/task-specific-file-name.md",
-        "content": "content here"
+        "path": "docs/product/todo-app-product-spec.md",
+        "content": "real content here"
       }
     }
   ],
@@ -196,7 +198,7 @@ Use this shape:
 No executable tool actions were provided. Tool executions so far: {{executedToolCount}}.
 Do not set done=true until tool results prove the task is complete.
 Continue the original user request by returning write_file/create_directory actions.
-Use task-specific filenames. Never use example.md.
+Use descriptive task-specific filenames. Never use literal placeholder filenames such as example.md, task-specific-file-name.md, or placeholder.md.
 
 Original user request:
 {{userPrompt}}

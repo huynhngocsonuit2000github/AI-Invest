@@ -1,8 +1,8 @@
 using ScrumAgent.ConsoleApp;
 using System.Text.Json;
 
-//var prompt = "Bootstrap this empty workspace for an AI Scrum project. Create folders: source, scrum/backlog, scrum/sprint, scrum/done, docs/product, docs/architecture, docs/api, docs/decisions, memory, logs/task_runs, logs/build, logs/tests, logs/reviews. Create initial memory files: memory/project_map.json, memory/business_rules.md, memory/feature_history.md, memory/test_knowledge.md, memory/coding_conventions.md, memory/known_issues.md, memory/agent_notes.md. Do not create application source code yet.";
-var prompt = "Create project planning files for a todo app with users, groups, and roles. Do not create source code yet.";
+//var prompt = "Create project planning files for a todo app with users, groups, and roles. Do not create source code yet.";
+var prompt = "Create project planning files for a .NET 8 todo app with users, groups, roles, and RBAC. Do not create source code yet.\r\n\r\nUse only JSON tool actions.\r\n\r\nCreate these files:\r\n- docs/product/todo-app-product-spec.md\r\n- docs/architecture/todo-app-architecture.md\r\n- docs/api/todo-app-api-plan.md\r\n- scrum/backlog/TASK-0001-project-setup.md\r\n- scrum/backlog/TASK-0002-user-module.md\r\n- scrum/backlog/TASK-0003-group-module.md\r\n- scrum/backlog/TASK-0004-role-module.md\r\n- scrum/backlog/TASK-0005-todo-module.md\r\n- scrum/backlog/TASK-0006-auth-rbac.md\r\n- scrum/backlog/TASK-0007-tests.md\r\n- memory/business_rules.md\r\n- memory/coding_conventions.md\r\n- memory/test_knowledge.md\r\n\r\nUse .NET 8 Web API, EF Core, PostgreSQL, JWT, controller-service-repository structure, DTOs, async methods, and xUnit tests.";
 
 var settings = LoadSettings();
 var workspace = settings.ProjectDir;
@@ -12,6 +12,7 @@ BootstrapWorkspace(workspace);
 
 var guard = new WorkspaceGuard(workspace);
 var logger = new WorkspaceLogger(guard);
+
 var tools = new ToolRegistry(new IWorkspaceTool[]
 {
     new ListFilesTool(guard),
